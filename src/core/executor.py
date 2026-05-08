@@ -76,20 +76,24 @@ class Executor:
                 completed += 1
                 logger.info(f"步骤 {step.id} 完成: {step.action[:50]}")
             else:
-                if step.can_retry:
+                # 循环重试直到成功或耗尽 max_retries
+                retried = False
+                while step.can_retry:
                     step.retry_count += 1
-                    logger.warning(f"步骤 {step.id} 失败，重试 {step.retry_count}/{step.max_retries}")
+                    logger.warning(
+                        f"步骤 {step.id} 失败，重试 {step.retry_count}/{step.max_retries}"
+                    )
                     retry_result = await self._execute_step(step)
                     if retry_result:
                         step.status = StepStatus.DONE
                         step.result = str(retry_result)
                         completed += 1
-                    else:
-                        step.status = StepStatus.FAILED
-                        errors.append(f"步骤 {step.id} 执行失败: {step.action}")
-                else:
+                        retried = True
+                        break
+
+                if not retried:
                     step.status = StepStatus.FAILED
-                    errors.append(f"步骤 {step.id} 执行失败（已耗尽重试）: {step.action}")
+                    errors.append(f"步骤 {step.id} 执行失败（已重试 {step.retry_count} 次）: {step.action}")
 
         success = len(errors) == 0
         plan.status = PlanStatus.DONE if success else PlanStatus.FAILED
