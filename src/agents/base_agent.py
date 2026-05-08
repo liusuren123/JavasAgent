@@ -57,11 +57,12 @@ class BaseAgent:
         context = self._build_context()
         plan = await self._planner.plan(user_input, context)
 
-        # 2. 决策检查
+        # 2. 决策检查（基于计划复杂度估算 confidence）
+        confidence = self._estimate_confidence(plan, user_input)
         decision = self._decider.evaluate(
             context=user_input,
             question=plan.intent,
-            confidence=0.8,  # TODO: 由 LLM 评估置信度
+            confidence=confidence,
         )
 
         if not decision.auto_decided:
@@ -91,6 +92,23 @@ class BaseAgent:
     def register_tool(self, name: str, tool: Any) -> None:
         """注册工具到执行引擎。"""
         self._executor.register_tool(name, tool)
+
+    @staticmethod
+    def _estimate_confidence(plan: TaskPlan, user_input: str) -> float:
+        """根据计划复杂度估算 confidence。
+
+        规则：
+        - 基础 confidence 0.85
+        - 步骤越多 confidence 越低（每步 -0.05，最低 -0.3）
+        - 使用高风险工具（shell）额外 -0.15
+        - 结果 clamp 到 [0.1, 1.0]
+        """
+        base = 0.85
+        step_penalty = min(0.30, len(plan.steps) * 0.05)
+        has_shell = any(s.tool == "shell" for s in plan.steps)
+        shell_penalty = 0.15 if has_shell else 0.0
+        confidence = base - step_penalty - shell_penalty
+        return max(0.1, min(1.0, confidence))
 
     def _build_context(self) -> str:
         """构建当前上下文信息。"""

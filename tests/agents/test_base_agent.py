@@ -102,6 +102,50 @@ class TestStatus:
         assert agent.is_running is False
 
 
+class TestEstimateConfidence:
+    """测试 _estimate_confidence 静态方法。"""
+
+    def test_single_safe_step(self) -> None:
+        plan = TaskPlan(
+            id="p1", intent="test",
+            steps=[Step(id="s0", action="读取", tool="system_control")],
+        )
+        conf = BaseAgent._estimate_confidence(plan, "读取文件")
+        assert conf == pytest.approx(0.80)
+
+    def test_shell_step_reduces_confidence(self) -> None:
+        plan = TaskPlan(
+            id="p1", intent="test",
+            steps=[Step(id="s0", action="运行命令", tool="shell")],
+        )
+        conf = BaseAgent._estimate_confidence(plan, "运行命令")
+        assert conf == pytest.approx(0.65)
+
+    def test_many_steps_reduces_confidence(self) -> None:
+        steps = [Step(id=f"s{i}", action=f"步骤{i}", tool="code_dev") for i in range(8)]
+        plan = TaskPlan(id="p1", intent="test", steps=steps)
+        conf = BaseAgent._estimate_confidence(plan, "复杂任务")
+        # base 0.85 - min(0.30, 0.40) = 0.55
+        assert conf == pytest.approx(0.55)
+
+    def test_confidence_clamped_low(self) -> None:
+        """超多步骤 + shell → confidence 不低于 0.1。"""
+        steps = [Step(id=f"s{i}", action=f"步骤{i}", tool="shell") for i in range(20)]
+        plan = TaskPlan(id="p1", intent="test", steps=steps)
+        conf = BaseAgent._estimate_confidence(plan, "极端任务")
+        assert conf >= 0.1
+
+    def test_no_steps_high_confidence(self) -> None:
+        plan = TaskPlan(id="p1", intent="test", steps=[])
+        conf = BaseAgent._estimate_confidence(plan, "空计划")
+        assert conf == pytest.approx(0.85)
+
+    def test_confidence_capped_at_one(self) -> None:
+        plan = TaskPlan(id="p1", intent="test", steps=[])
+        conf = BaseAgent._estimate_confidence(plan, "x")
+        assert conf <= 1.0
+
+
 class TestProcess:
     """测试 process() 核心流程。"""
 
