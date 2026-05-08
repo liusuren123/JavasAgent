@@ -65,7 +65,6 @@
 |------|------|------|
 | **Planner** | 解析用户意图，拆解任务为步骤链 | `planner.py` |
 | **Executor** | 按步骤执行，管理执行状态 | `executor.py` |
-| **Reflector** | 定期反思审查，保证质量与目标对齐 | `reflector.py` |
 | **Decider** | 决策点判断——问人还是自己做 | `decider.py` |
 | **Scheduler** | 任务队列管理与调度 | `scheduler.py` |
 
@@ -118,7 +117,7 @@
 
 ### Phase 1: 基础骨架 (当前)
 - [ ] 项目结构搭建
-- [ ] Agent 核心循环（感知→规划→执行→反思）
+- [ ] Agent 核心循环（感知→规划→执行）
 - [ ] 基础 CLI 交互
 - [ ] LLM 接入层
 - [ ] 简单任务执行（文件操作级别）
@@ -169,7 +168,6 @@ JavasAgent/
 │   │   ├── __init__.py
 │   │   ├── planner.py       # 任务规划
 │   │   ├── executor.py      # 执行引擎
-│   │   ├── reflector.py     # 反思审查
 │   │   ├── decider.py       # 决策判断
 │   │   └── scheduler.py     # 任务调度
 │   ├── agents/              # Agent 实现

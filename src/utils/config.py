@@ -30,13 +30,6 @@ class LLMConfig(BaseModel):
     max_tokens: int = 4096
 
 
-class ReflectionConfig(BaseModel):
-    """反思审查配置。"""
-
-    interval: int = 600  # 秒
-    checklist: list[str] = Field(default_factory=list)
-
-
 class MemoryConfig(BaseModel):
     """记忆系统配置。"""
 
@@ -97,7 +90,6 @@ class AppConfig(BaseModel):
     agent: AgentConfig = Field(default_factory=AgentConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
-    reflection: ReflectionConfig = Field(default_factory=ReflectionConfig)
     platform: PlatformConfig = Field(default_factory=PlatformConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     perception: PerceptionConfig = Field(default_factory=PerceptionConfig)

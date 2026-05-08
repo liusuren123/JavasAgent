@@ -110,28 +110,6 @@ class TaskPlan:
 
 
 @dataclass
-class ActionItem:
-    """反思审查的行动项。"""
-
-    category: str
-    description: str
-    severity: str  # "low" | "medium" | "high"
-    suggestion: str
-
-
-@dataclass
-class ReflectionReport:
-    """反思审查报告。"""
-
-    timestamp: datetime = field(default_factory=datetime.now)
-    checklist_results: dict[str, str] = field(default_factory=dict)
-    overall_score: float = 0.0
-    action_items: list[ActionItem] = field(default_factory=list)
-    should_continue: bool = True
-    summary: str = ""
-
-
-@dataclass
 class DecisionPoint:
     """决策点。"""
 
