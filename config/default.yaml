@@ -1,0 +1,72 @@
+# JavasAgent 默认配置
+
+agent:
+  name: "JavasAgent"
+  version: "0.1.0"
+  
+  # 决策阈值：0-1，越高越倾向询问人类
+  ask_human_threshold: 0.6
+  
+  # 单个任务最大执行时间（秒）
+  max_task_duration: 3600
+  
+  # 步骤最大重试次数
+  max_step_retries: 3
+
+llm:
+  # 默认使用的模型
+  default_provider: "zhipuai"
+  
+  providers:
+    zhipuai:
+      model: "glm-4-plus"
+      api_key_env: "ZHIPUAI_API_KEY"
+      base_url: "https://open.bigmodel.cn/api/paas/v4"
+    
+    openai:
+      model: "gpt-4o"
+      api_key_env: "OPENAI_API_KEY"
+      base_url: "https://api.openai.com/v1"
+  
+  # 生成参数
+  temperature: 0.7
+  max_tokens: 4096
+
+memory:
+  # 短期记忆容量
+  short_term_max_messages: 50
+  
+  # 长期记忆存储路径
+  long_term_db_path: "./data/memory/chroma"
+  
+  # 向量嵌入模型
+  embedding_model: "text-embedding-3-small"
+
+platform:
+  # 屏幕操作延迟（秒），防止操作过快
+  action_delay: 0.5
+  
+  # 截图保存路径
+  screenshot_path: "./data/screenshots"
+  
+  # 日志级别
+  log_level: "INFO"
+  log_path: "./data/logs"
+
+tools:
+  system_control:
+    enabled: true
+  
+  code_dev:
+    enabled: true
+    workspace: "./workspace"
+    test_command: "pytest"
+  
+  office_ops:
+    enabled: false  # Phase 4 启用
+  
+  creative_tools:
+    enabled: false  # Phase 5 启用
+  
+  browser_control:
+    enabled: false  # Phase 4 启用
