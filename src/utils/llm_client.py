@@ -28,6 +28,9 @@ class LLMClient:
 
     def _get_api_key(self, provider: LLMProviderConfig) -> str:
         """从环境变量获取 API Key。"""
+        # Ollama 本地服务不需要 API Key
+        if "localhost" in provider.base_url or "127.0.0.1" in provider.base_url:
+            return "ollama"  # Ollama 接受任意非空值
         key = os.environ.get(provider.api_key_env, "")
         if not key:
             logger.warning(f"环境变量 {provider.api_key_env} 未设置")

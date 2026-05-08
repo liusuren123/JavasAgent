@@ -24,8 +24,26 @@ class LLMProviderConfig(BaseModel):
 class LLMConfig(BaseModel):
     """LLM 配置。"""
 
-    default_provider: str = "zhipuai"
-    providers: dict[str, LLMProviderConfig] = Field(default_factory=dict)
+    default_provider: str = "ollama"
+    providers: dict[str, LLMProviderConfig] = Field(
+        default_factory=lambda: {
+            "ollama": LLMProviderConfig(
+                model="qwen3.6",
+                api_key_env="",
+                base_url="http://localhost:11434/v1",
+            ),
+            "ollama-vision": LLMProviderConfig(
+                model="qwen3.6",
+                api_key_env="",
+                base_url="http://localhost:11434/v1",
+            ),
+            "zhipuai": LLMProviderConfig(
+                model="glm-4-plus",
+                api_key_env="ZHIPUAI_API_KEY",
+                base_url="https://open.bigmodel.cn/api/paas/v4",
+            ),
+        }
+    )
     temperature: float = 0.7
     max_tokens: int = 4096
 

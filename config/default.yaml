@@ -14,10 +14,23 @@ agent:
   max_step_retries: 3
 
 llm:
-  # 默认使用的模型
-  default_provider: "zhipuai"
+  # 默认使用的模型（本地优先，节省 API 费用）
+  default_provider: "ollama"
   
   providers:
+    # 本地 Ollama（推荐，多模态能力强）
+    ollama:
+      model: "qwen3.6"
+      api_key_env: ""  # 本地无需 API Key
+      base_url: "http://localhost:11434/v1"
+    
+    # Ollama 多模态（视觉感知专用）
+    ollama-vision:
+      model: "qwen3.6"
+      api_key_env: ""
+      base_url: "http://localhost:11434/v1"
+    
+    # 云端 API 备选
     zhipuai:
       model: "glm-4-plus"
       api_key_env: "ZHIPUAI_API_KEY"
