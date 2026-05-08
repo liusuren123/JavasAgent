@@ -16,7 +16,6 @@ from src.utils.config import (
     LLMProviderConfig,
     MemoryConfig,
     PlatformConfig,
-    ReflectionConfig,
     ToolConfig,
     ToolsConfig,
     load_config,
@@ -36,7 +35,7 @@ class TestDefaultConfig:
 
     def test_default_llm_config(self) -> None:
         cfg = LLMConfig()
-        assert cfg.default_provider == "zhipuai"
+        assert cfg.default_provider == "ollama"
         assert cfg.temperature == 0.7
         assert cfg.max_tokens == 4096
 
@@ -54,7 +53,6 @@ class TestDefaultConfig:
         assert isinstance(cfg.agent, AgentConfig)
         assert isinstance(cfg.llm, LLMConfig)
         assert isinstance(cfg.memory, MemoryConfig)
-        assert isinstance(cfg.reflection, ReflectionConfig)
         assert isinstance(cfg.platform, PlatformConfig)
         assert isinstance(cfg.tools, ToolsConfig)
 
@@ -183,7 +181,4 @@ class TestPydanticValidation:
         cfg = ToolConfig(enabled=True)
         assert cfg.enabled is True
 
-    def test_reflection_config_defaults(self) -> None:
-        cfg = ReflectionConfig()
-        assert cfg.interval == 600
-        assert cfg.checklist == []
+
