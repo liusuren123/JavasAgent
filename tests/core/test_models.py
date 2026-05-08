@@ -1,5 +1,7 @@
 """数据模型测试。"""
 
+import pytest
+
 from src.core.models import (
     ActionItem,
     DecisionPoint,
