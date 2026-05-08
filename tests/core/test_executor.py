@@ -127,6 +127,41 @@ class TestExecutor:
         assert step.status == StepStatus.FAILED
         assert len(result.errors) == 1
 
+    def test_retry_loop_until_success(self) -> None:
+        """循环重试直到成功。"""
+        executor = Executor()
+        # 失败 2 次，第 3 次成功（共调用 1+2=3 次）
+        tool = MagicMock()
+        tool.execute = AsyncMock(side_effect=[None, None, "finally_ok"])
+        executor.register_tool("mock_tool", tool)
+
+        step = self._make_step(max_retries=3)
+        plan = self._make_plan(steps=[step])
+        result = asyncio.get_event_loop().run_until_complete(executor.execute(plan))
+
+        assert result.success is True
+        assert result.completed_steps == 1
+        assert step.retry_count == 2
+        assert step.status == StepStatus.DONE
+        assert tool.execute.call_count == 3
+
+    def test_retry_loop_exhausted_all_attempts(self) -> None:
+        """重试循环耗尽所有次数后应失败。"""
+        executor = Executor()
+        tool = self._make_failing_tool()
+        executor.register_tool("mock_tool", tool)
+
+        step = self._make_step(max_retries=3)
+        plan = self._make_plan(steps=[step])
+        result = asyncio.get_event_loop().run_until_complete(executor.execute(plan))
+
+        assert result.success is False
+        assert step.status == StepStatus.FAILED
+        assert step.retry_count == 3
+        # 1 initial + 3 retries = 4 total calls
+        assert tool.execute.call_count == 4
+        assert "已重试 3 次" in result.errors[0]
+
     def test_no_retry_when_max_zero(self) -> None:
         """max_retries=0 时不应重试。"""
         executor = Executor()

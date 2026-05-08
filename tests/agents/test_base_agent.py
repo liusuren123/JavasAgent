@@ -292,3 +292,81 @@ class TestScreenIntegration:
         result = await agent.analyze_screen(b"fake_png")
         assert result == "屏幕上显示了桌面"
         agent._screen_analyzer.describe.assert_called_once_with(b"fake_png")
+
+
+class TestPlatformIntegration:
+    """测试 BaseAgent 与 PlatformAdapter 的集成。"""
+
+    @pytest.mark.asyncio
+    async def test_analyze_screen_if_available_no_platform(self) -> None:
+        """无平台适配器时返回空字符串。"""
+        config = _make_config()
+        agent = BaseAgent(config)
+        result = await agent._analyze_screen_if_available()
+        assert result == ""
+
+    @pytest.mark.asyncio
+    async def test_analyze_screen_if_available_with_platform(self) -> None:
+        """有平台适配器时应截屏并分析。"""
+        config = _make_config()
+
+        mock_platform = AsyncMock()
+        mock_platform.screenshot.return_value = b"fake_png_data"
+
+        agent = BaseAgent(config, platform=mock_platform)
+        agent._screen_analyzer = AsyncMock()
+        agent._screen_analyzer.describe.return_value = "屏幕显示桌面"
+
+        result = await agent._analyze_screen_if_available()
+        assert result == "屏幕显示桌面"
+        mock_platform.screenshot.assert_called_once()
+        agent._screen_analyzer.describe.assert_called_once_with(b"fake_png_data")
+
+    @pytest.mark.asyncio
+    async def test_analyze_screen_if_available_platform_failure(self) -> None:
+        """平台截屏失败时应返回空字符串。"""
+        config = _make_config()
+
+        mock_platform = AsyncMock()
+        mock_platform.screenshot.side_effect = RuntimeError("截屏失败")
+
+        agent = BaseAgent(config, platform=mock_platform)
+        result = await agent._analyze_screen_if_available()
+        assert result == ""
+
+    @pytest.mark.asyncio
+    async def test_process_with_screen_context(self) -> None:
+        """屏幕相关任务应注入屏幕感知上下文。"""
+        config = _make_config()
+
+        mock_platform = AsyncMock()
+        mock_platform.screenshot.return_value = b"fake_png"
+
+        agent = BaseAgent(config, platform=mock_platform)
+        agent._screen_analyzer = AsyncMock()
+        agent._screen_analyzer.describe.return_value = "桌面图标"
+
+        mock_plan = _make_plan("点击按钮", 1)
+        agent._planner = AsyncMock()
+        agent._planner.plan.return_value = mock_plan
+
+        agent._decider = MagicMock()
+        agent._decider.evaluate.return_value = DecisionPoint(
+            context="点击按钮", question="点击按钮",
+            confidence=0.9, auto_decided=True,
+        )
+
+        mock_result = ExecutionResult(
+            plan_id="plan_test", success=True,
+            completed_steps=1, total_steps=1, errors=[], output={},
+        )
+        agent._executor = AsyncMock()
+        agent._executor.execute.return_value = mock_result
+
+        response = await agent.process("帮我点击按钮")
+        assert "✅" in response
+        # 验证 planner.plan 收到的 context 包含屏幕感知
+        call_args = agent._planner.plan.call_args
+        context_arg = call_args[0][1]  # 第二个位置参数是 context
+        assert "屏幕感知" in context_arg
+        assert "桌面图标" in context_arg

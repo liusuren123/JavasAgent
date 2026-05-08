@@ -10,6 +10,30 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
+class TestCreatePlatformAdapter:
+    """测试 create_platform_adapter 工厂函数。"""
+
+    def test_windows_platform(self) -> None:
+        """Windows 平台应返回 WindowsAdapter。"""
+        with patch("src.platforms.platform") as mock_platform:
+            mock_platform.system.return_value = "Windows"
+            from src.platforms import create_platform_adapter
+            from src.utils.config import AppConfig
+
+            adapter = create_platform_adapter(AppConfig())
+            assert adapter is not None
+            assert hasattr(adapter, "screenshot")
+
+    def test_unsupported_platform(self) -> None:
+        """不支持的平台应返回 None。"""
+        with patch("src.platforms.platform") as mock_platform:
+            mock_platform.system.return_value = "Linux"
+            from src.platforms import create_platform_adapter
+
+            adapter = create_platform_adapter()
+            assert adapter is None
+
+
 class TestWindowsAdapter:
     """WindowsAdapter 测试。"""
 
