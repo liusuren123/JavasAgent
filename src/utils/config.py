@@ -80,6 +80,17 @@ class AgentConfig(BaseModel):
     max_step_retries: int = 3
 
 
+class PerceptionConfig(BaseModel):
+    """视觉感知配置。"""
+
+    enabled: bool = True
+    provider: str | None = None  # 使用哪个 LLM 提供商，None 表示默认
+    describe_max_tokens: int = 1024
+    locate_max_tokens: int = 512
+    analyze_max_tokens: int = 2048
+    image_detail: str = "auto"  # low / high / auto
+
+
 class AppConfig(BaseModel):
     """应用全局配置。"""
 
@@ -89,6 +100,7 @@ class AppConfig(BaseModel):
     reflection: ReflectionConfig = Field(default_factory=ReflectionConfig)
     platform: PlatformConfig = Field(default_factory=PlatformConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
+    perception: PerceptionConfig = Field(default_factory=PerceptionConfig)
 
 
 def load_config(config_path: str | Path | None = None) -> AppConfig:

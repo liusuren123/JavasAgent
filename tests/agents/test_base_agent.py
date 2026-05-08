@@ -255,3 +255,40 @@ class TestProcess:
         assert msgs[0].role == "user"
         assert msgs[0].content == "hello"
         assert msgs[1].role == "assistant"
+
+
+class TestScreenIntegration:
+    """测试 BaseAgent 与 ScreenAnalyzer 的集成。"""
+
+    def test_screen_analyzer_initialized(self) -> None:
+        """BaseAgent 应初始化 ScreenAnalyzer。"""
+        config = _make_config()
+        agent = BaseAgent(config)
+        assert hasattr(agent, "_screen_analyzer")
+        assert agent._screen_analyzer is not None
+
+    def test_is_screen_related(self) -> None:
+        """应正确判断是否涉及屏幕操作。"""
+        config = _make_config()
+        agent = BaseAgent(config)
+
+        assert agent._is_screen_related("帮我点击保存按钮") is True
+        assert agent._is_screen_related("截屏") is True
+        assert agent._is_screen_related("看看屏幕上有什么") is True
+        assert agent._is_screen_related("打开浏览器") is True
+        assert agent._is_screen_related("关闭窗口") is True
+        assert agent._is_screen_related("今天天气怎么样") is False
+        assert agent._is_screen_related("帮我写个函数") is False
+
+    @pytest.mark.asyncio
+    async def test_analyze_screen_public_method(self) -> None:
+        """公开的 analyze_screen 方法应调用 ScreenAnalyzer.describe。"""
+        config = _make_config()
+        agent = BaseAgent(config)
+
+        agent._screen_analyzer = AsyncMock()
+        agent._screen_analyzer.describe.return_value = "屏幕上显示了桌面"
+
+        result = await agent.analyze_screen(b"fake_png")
+        assert result == "屏幕上显示了桌面"
+        agent._screen_analyzer.describe.assert_called_once_with(b"fake_png")

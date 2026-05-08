@@ -15,6 +15,7 @@ from src.core.models import TaskPlan
 from src.core.planner import Planner
 from src.core.scheduler import Scheduler
 from src.memory.short_term import ShortTermMemory
+from src.perception.screen_analyzer import ScreenAnalyzer
 from src.utils.config import AppConfig
 from src.utils.llm_client import LLMClient
 
@@ -38,8 +39,16 @@ class BaseAgent:
         self._decider = Decider(config.agent)
         self._scheduler = Scheduler()
         self._memory = ShortTermMemory(config.memory.short_term_max_messages)
+        self._screen_analyzer = ScreenAnalyzer(self._llm, config.perception)
 
         self._running = False
+
+    # 屏幕操作相关的关键词
+    _SCREEN_KEYWORDS: tuple[str, ...] = (
+        "屏幕", "截图", "截屏", "画面", "桌面", "窗口",
+        "点击", "按钮", "输入", "图标", "菜单",
+        "界面", "UI", "打开", "关闭",
+    )
 
     async def process(self, user_input: str) -> str:
         """处理用户输入（核心入口）。
@@ -53,11 +62,18 @@ class BaseAgent:
         logger.info(f"收到用户输入: {user_input[:100]}...")
         self._memory.add("user", user_input)
 
-        # 1. 规划
+        # 1. 屏幕感知：如果任务涉及屏幕操作，先截屏分析上下文
+        screen_context = ""
+        if self._is_screen_related(user_input):
+            screen_context = await self._analyze_screen_if_available()
+
+        # 2. 规划
         context = self._build_context()
+        if screen_context:
+            context += f"\n\n屏幕感知:\n{screen_context}"
         plan = await self._planner.plan(user_input, context)
 
-        # 2. 决策检查（基于计划复杂度估算 confidence）
+        # 3. 决策检查（基于计划复杂度估算 confidence）
         confidence = self._estimate_confidence(plan, user_input)
         decision = self._decider.evaluate(
             context=user_input,
@@ -70,13 +86,13 @@ class BaseAgent:
             self._memory.add("assistant", response)
             return response
 
-        # 3. 提交并执行
+        # 4. 提交并执行
         task_id = await self._scheduler.submit(plan)
         self._scheduler.mark_running(plan)
         result = await self._executor.execute(plan)
         self._scheduler.mark_done(plan, result.success)
 
-        # 4. 构建回复
+        # 5. 构建回复
         if result.success:
             response = (
                 f"✅ 任务完成 ({result.completed_steps}/{result.total_steps} 步)\n"
@@ -92,6 +108,36 @@ class BaseAgent:
     def register_tool(self, name: str, tool: Any) -> None:
         """注册工具到执行引擎。"""
         self._executor.register_tool(name, tool)
+
+    async def analyze_screen(self, screenshot: bytes) -> str:
+        """分析屏幕截图。
+
+        公开方法，供外部直接调用进行屏幕分析。
+
+        Args:
+            screenshot: PNG 格式的截图 bytes
+
+        Returns:
+            屏幕内容描述文本
+        """
+        return await self._screen_analyzer.describe(screenshot)
+
+    def _is_screen_related(self, user_input: str) -> bool:
+        """判断用户输入是否涉及屏幕操作。"""
+        return any(kw in user_input for kw in self._SCREEN_KEYWORDS)
+
+    async def _analyze_screen_if_available(self) -> str:
+        """尝试截屏并分析，失败则返回空字符串。
+
+        需要平台适配器提供截屏能力。当前仅在有平台适配器时生效。
+        """
+        try:
+            # 这里不直接依赖平台适配器，仅返回空字符串
+            # 实际使用时由上层注入平台适配器
+            return ""
+        except Exception as e:
+            logger.debug(f"屏幕分析跳过: {e}")
+            return ""
 
     @staticmethod
     def _estimate_confidence(plan: TaskPlan, user_input: str) -> float:

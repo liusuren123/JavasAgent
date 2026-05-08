@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -192,3 +193,110 @@ class TestChatWithSystem:
                 assert messages[0]["content"] == "你是规划器"
                 assert messages[1]["role"] == "user"
                 assert messages[1]["content"] == "规划任务"
+
+
+class TestBuildImageContent:
+    """测试 build_image_content() 静态方法。"""
+
+    def test_creates_text_and_image_parts(self) -> None:
+        image_data = b"\x89PNG\x0d\x0a\x1a\x0a"
+        content = LLMClient.build_image_content("描述图片", image_data)
+
+        assert len(content) == 2
+        assert content[0]["type"] == "text"
+        assert content[0]["text"] == "描述图片"
+        assert content[1]["type"] == "image_url"
+        assert "image_url" in content[1]
+
+        url = content[1]["image_url"]["url"]
+        assert url.startswith("data:image/png;base64,")
+        assert base64.b64encode(image_data).decode() in url
+
+    def test_custom_format(self) -> None:
+        content = LLMClient.build_image_content("test", b"abc", image_format="jpeg")
+        url = content[1]["image_url"]["url"]
+        assert url.startswith("data:image/jpeg;base64,")
+
+    def test_custom_detail(self) -> None:
+        content = LLMClient.build_image_content("test", b"abc", detail="high")
+        assert content[1]["image_url"]["detail"] == "high"
+
+    def test_base64_encoding_correct(self) -> None:
+        data = b"hello world"
+        content = LLMClient.build_image_content("test", data)
+        url = content[1]["image_url"]["url"]
+        b64_part = url.split(",")[1]
+        assert base64.b64decode(b64_part) == data
+
+
+class TestChatWithImage:
+    """测试 chat_with_image() 多模态方法。"""
+
+    @pytest.mark.asyncio
+    async def test_sends_multimodal_messages(self) -> None:
+        config = _make_config()
+        client = LLMClient(config)
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "这是一张截图"}}]
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_httpx_client = AsyncMock()
+        mock_httpx_client.post.return_value = mock_response
+        mock_httpx_client.__aenter__ = AsyncMock(return_value=mock_httpx_client)
+        mock_httpx_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch.dict(os.environ, {"ZHIPUAI_API_KEY": "sk-test"}):
+            with patch("src.utils.llm_client.httpx.AsyncClient", return_value=mock_httpx_client):
+                result = await client.chat_with_image(
+                    system_prompt="你是屏幕分析助手",
+                    user_text="描述截图",
+                    image_bytes=b"fake_png_data",
+                    detail="low",
+                    max_tokens=512,
+                )
+                assert result == "这是一张截图"
+                call_kwargs = mock_httpx_client.post.call_args.kwargs
+                messages = call_kwargs.get("json", {})["messages"]
+                assert len(messages) == 2
+                assert messages[0]["role"] == "system"
+                assert messages[0]["content"] == "你是屏幕分析助手"
+                # user message should have multimodal content
+                user_content = messages[1]["content"]
+                assert isinstance(user_content, list)
+                assert user_content[0]["type"] == "text"
+                assert user_content[1]["type"] == "image_url"
+                assert messages[1]["role"] == "user"
+
+    @pytest.mark.asyncio
+    async def test_custom_params_passed(self) -> None:
+        config = _make_config()
+        client = LLMClient(config)
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "ok"}}]
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_httpx_client = AsyncMock()
+        mock_httpx_client.post.return_value = mock_response
+        mock_httpx_client.__aenter__ = AsyncMock(return_value=mock_httpx_client)
+        mock_httpx_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch.dict(os.environ, {"ZHIPUAI_API_KEY": "sk-test"}):
+            with patch("src.utils.llm_client.httpx.AsyncClient", return_value=mock_httpx_client):
+                await client.chat_with_image(
+                    system_prompt="sys",
+                    user_text="user",
+                    image_bytes=b"data",
+                    provider="openai",
+                    temperature=0.2,
+                    max_tokens=256,
+                )
+                call_kwargs = mock_httpx_client.post.call_args.kwargs
+                payload = call_kwargs.get("json", {})
+                assert payload["temperature"] == 0.2
+                assert payload["max_tokens"] == 256
