@@ -102,6 +102,12 @@ class TaskPlan:
                 return s
         return None
 
+    def __lt__(self, other: TaskPlan) -> bool:
+        """用于优先级队列排序（优先级值越大越优先，降序）。"""
+        if not isinstance(other, TaskPlan):
+            return NotImplemented
+        return self.priority.value > other.priority.value
+
 
 @dataclass
 class ActionItem:
