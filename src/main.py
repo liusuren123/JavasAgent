@@ -14,6 +14,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 
 from src.agents.base_agent import BaseAgent
+from src.platforms import create_platform_adapter
 from src.tools.system_control import SystemControl
 from src.utils.config import load_config
 from src.utils.logger import get_logger, setup_logger
@@ -27,7 +28,8 @@ def create_agent() -> BaseAgent:
     setup_logger(config.platform.log_level, config.platform.log_path)
     logger = get_logger("main")
 
-    agent = BaseAgent(config)
+    platform_adapter = create_platform_adapter(config)
+    agent = BaseAgent(config, platform=platform_adapter)
 
     # 注册基础工具
     if config.tools.system_control.enabled:

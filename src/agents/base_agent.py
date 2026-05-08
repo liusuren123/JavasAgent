@@ -16,6 +16,7 @@ from src.core.planner import Planner
 from src.core.scheduler import Scheduler
 from src.memory.short_term import ShortTermMemory
 from src.perception.screen_analyzer import ScreenAnalyzer
+from src.platforms.base import PlatformAdapter
 from src.utils.config import AppConfig
 from src.utils.llm_client import LLMClient
 
@@ -31,7 +32,11 @@ class BaseAgent:
     5. 反馈：报告执行结果
     """
 
-    def __init__(self, config: AppConfig) -> None:
+    def __init__(
+        self,
+        config: AppConfig,
+        platform: PlatformAdapter | None = None,
+    ) -> None:
         self._config = config
         self._llm = LLMClient(config.llm)
         self._planner = Planner(self._llm)
@@ -40,6 +45,7 @@ class BaseAgent:
         self._scheduler = Scheduler()
         self._memory = ShortTermMemory(config.memory.short_term_max_messages)
         self._screen_analyzer = ScreenAnalyzer(self._llm, config.perception)
+        self._platform = platform
 
         self._running = False
 
@@ -131,12 +137,17 @@ class BaseAgent:
 
         需要平台适配器提供截屏能力。当前仅在有平台适配器时生效。
         """
-        try:
-            # 这里不直接依赖平台适配器，仅返回空字符串
-            # 实际使用时由上层注入平台适配器
+        if self._platform is None:
+            logger.debug("屏幕分析跳过: 无平台适配器")
             return ""
+
+        try:
+            screenshot_bytes = await self._platform.screenshot()
+            description = await self._screen_analyzer.describe(screenshot_bytes)
+            logger.info("屏幕分析完成")
+            return description
         except Exception as e:
-            logger.debug(f"屏幕分析跳过: {e}")
+            logger.warning(f"屏幕分析失败: {e}")
             return ""
 
     @staticmethod
