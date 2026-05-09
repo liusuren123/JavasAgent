@@ -12,6 +12,8 @@ from typing import Any
 
 from loguru import logger
 
+from src.utils.path_safety import PathSafetyError, safe_resolve_path
+
 
 class CodeDev:
     """代码开发工具集。"""
@@ -52,6 +54,14 @@ class CodeDev:
             return {"error": f"未知操作: {action}"}
 
         return await handler(params)
+
+    def _safe_path(self, user_path: str, *, allow_create_parents: bool = False) -> Path:
+        """安全解析用户路径，防止路径遍历。"""
+        return safe_resolve_path(
+            self._workspace,
+            user_path,
+            allow_create_parents=allow_create_parents,
+        )
 
     # ------------------------------------------------------------------
     # generate_code
@@ -102,7 +112,11 @@ class CodeDev:
             start_line: 起始行号（可选，1-based）
             end_line: 结束行号（可选，包含）
         """
-        path = self._workspace / params["path"]
+        try:
+            path = self._safe_path(params["path"])
+        except PathSafetyError as e:
+            return {"error": str(e)}
+
         if not path.exists():
             return {"error": f"文件不存在: {path}"}
 
@@ -156,7 +170,11 @@ class CodeDev:
             replacement: 替换文本
             encoding: 文件编码
         """
-        path = self._workspace / params["path"]
+        try:
+            path = self._safe_path(params["path"])
+        except PathSafetyError as e:
+            return {"error": str(e)}
+
         if not path.exists():
             return {"error": f"文件不存在: {path}"}
 

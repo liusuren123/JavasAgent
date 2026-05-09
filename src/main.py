@@ -41,7 +41,7 @@ def create_agent() -> BaseAgent:
 
     # 注册代码开发工具
     if config.tools.code_dev.enabled:
-        code_dev = CodeDev()
+        code_dev = CodeDev(llm_client=agent._llm)
         agent.register_tool("code_dev", code_dev)
         logger.info("代码开发工具已注册")
 

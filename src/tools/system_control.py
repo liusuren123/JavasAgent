@@ -13,6 +13,8 @@ from typing import Any
 
 from loguru import logger
 
+from src.utils.path_safety import PathSafetyError, safe_resolve_path
+
 
 class SystemControl:
     """系统控制工具集。"""
@@ -44,9 +46,33 @@ class SystemControl:
 
         return await handler(params)
 
+    def _safe_path(self, user_path: str, *, allow_create_parents: bool = False) -> Path:
+        """安全解析用户路径，防止路径遍历。
+
+        Args:
+            user_path: 用户提供的相对路径
+            allow_create_parents: 是否允许创建父目录
+
+        Returns:
+            解析后的安全路径
+
+        Raises:
+            PathSafetyError: 路径不安全时抛出
+        """
+        return safe_resolve_path(
+            self._workspace,
+            user_path,
+            allow_create_parents=allow_create_parents,
+        )
+
     async def _list_files(self, params: dict) -> dict:
         """列出目录文件。"""
-        path = self._workspace / params.get("path", "")
+        raw_path = params.get("path", "") or ""
+        try:
+            path = self._safe_path(raw_path) if raw_path else self._workspace
+        except PathSafetyError as e:
+            return {"error": str(e)}
+
         if not path.exists():
             return {"error": f"路径不存在: {path}"}
 
@@ -61,7 +87,11 @@ class SystemControl:
 
     async def _read_file(self, params: dict) -> dict:
         """读取文件内容。"""
-        path = self._workspace / params["path"]
+        try:
+            path = self._safe_path(params["path"])
+        except PathSafetyError as e:
+            return {"error": str(e)}
+
         if not path.exists():
             return {"error": f"文件不存在: {path}"}
 
@@ -71,8 +101,10 @@ class SystemControl:
 
     async def _write_file(self, params: dict) -> dict:
         """写入文件。"""
-        path = self._workspace / params["path"]
-        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            path = self._safe_path(params["path"], allow_create_parents=True)
+        except PathSafetyError as e:
+            return {"error": str(e)}
 
         content = params.get("content", "")
         encoding = params.get("encoding", "utf-8")
@@ -82,7 +114,11 @@ class SystemControl:
 
     async def _delete_file(self, params: dict) -> dict:
         """删除文件或目录。"""
-        path = self._workspace / params["path"]
+        try:
+            path = self._safe_path(params["path"])
+        except PathSafetyError as e:
+            return {"error": str(e)}
+
         if not path.exists():
             return {"error": f"路径不存在: {path}"}
 
@@ -96,7 +132,11 @@ class SystemControl:
 
     async def _create_dir(self, params: dict) -> dict:
         """创建目录。"""
-        path = self._workspace / params["path"]
+        try:
+            path = self._safe_path(params["path"], allow_create_parents=True)
+        except PathSafetyError as e:
+            return {"error": str(e)}
+
         path.mkdir(parents=True, exist_ok=True)
         return {"created": str(path)}
 
