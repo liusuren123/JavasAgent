@@ -4,5 +4,6 @@
 """
 
 from src.perception.screen_analyzer import ScreenAnalyzer
+from src.perception.window_manager import WindowInfo, WindowManager
 
-__all__ = ["ScreenAnalyzer"]
+__all__ = ["ScreenAnalyzer", "WindowInfo", "WindowManager"]
