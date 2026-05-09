@@ -46,11 +46,11 @@ def create_agent() -> BaseAgent:
         agent.register_tool("code_dev", code_dev)
         logger.info("代码开发工具已注册")
 
-    # 注册浏览器控制工具
+    # 注册浏览器控制工具（懒初始化：首次 execute 时自动调用 initialize）
     if config.tools.browser_control.enabled:
         browser = BrowserControl()
         agent.register_tool("browser_control", browser)
-        logger.info("浏览器控制工具已注册")
+        logger.info("浏览器控制工具已注册（懒初始化模式）")
 
     return agent
 

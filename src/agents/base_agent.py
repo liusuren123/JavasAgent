@@ -457,12 +457,21 @@ class BaseAgent:
     async def close(self) -> None:
         """释放 Agent 持有的所有资源。
 
-        关闭 LLM 连接池，清理长期记忆引用。
+        关闭 LLM 连接池，清理工具资源，清理长期记忆引用。
         调用后 Agent 不再可用。
         """
         if self._llm is not None:
             await self._llm.close()
             logger.info("LLM 连接池已关闭")
+
+        # 清理可关闭的工具资源（如 BrowserControl）
+        for tool_name, tool in self._executor._tool_registry.items():
+            if hasattr(tool, "close") and callable(tool.close):
+                try:
+                    await tool.close()
+                    logger.debug(f"工具资源已释放: {tool_name}")
+                except Exception as e:
+                    logger.warning(f"工具资源释放失败 ({tool_name}): {e}")
 
         # 清理长期记忆引用（ChromaDB 使用 PersistentClient，无需显式关闭）
         self._long_term_memory = None  # type: ignore[assignment]
