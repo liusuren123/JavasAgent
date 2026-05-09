@@ -13,7 +13,7 @@ from loguru import logger
 
 from src.core.decider import Decider
 from src.core.executor import Executor
-from src.core.models import TaskPlan
+from src.core.models import ExecutionResult, TaskPlan
 from src.core.planner import Planner
 from src.core.scheduler import Scheduler
 from src.memory.long_term import LongTermMemory

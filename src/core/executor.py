@@ -5,24 +5,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 from loguru import logger
 
-from src.core.models import PlanStatus, Step, StepStatus, TaskPlan
+from src.core.models import ExecutionResult, PlanStatus, Step, StepStatus, TaskPlan
 
-
-@dataclass
-class ExecutionResult:
-    """执行结果。"""
-
-    plan_id: str
-    success: bool
-    completed_steps: int
-    total_steps: int
-    errors: list[str]
-    output: dict[str, Any]
+# Re-export ExecutionResult for backward compatibility (tests import from this module)
+__all__ = ["Executor", "ExecutionResult"]
 
 
 class Executor:

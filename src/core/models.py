@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from typing import Any
 
 
 class PlanStatus(str, Enum):
@@ -118,3 +119,15 @@ class DecisionPoint:
     confidence: float  # 0-1，越高越确定
     options: list[str] = field(default_factory=list)
     auto_decided: bool = False
+
+
+@dataclass
+class ExecutionResult:
+    """执行结果。"""
+
+    plan_id: str
+    success: bool
+    completed_steps: int
+    total_steps: int
+    errors: list[str] = field(default_factory=list)
+    output: dict[str, Any] = field(default_factory=dict)
