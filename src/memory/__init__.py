@@ -6,6 +6,8 @@ from src.memory.short_term import Message, ShortTermMemory
 from src.memory.skill_models import LearnedPattern, SkillDefinition, SkillSuggestion
 from src.memory.skill_registry import SkillRegistry
 from src.memory.skill_learner import SkillLearner
+from src.memory.skill_auto_updater import SkillAutoUpdater
+from src.memory.skill_auto_updater_models import SkillUpdate, ToolUsageRecord
 
 __all__ = [
     "KnowledgeBase",
@@ -18,5 +20,8 @@ __all__ = [
     "SkillDefinition",
     "SkillSuggestion",
     "SkillLearner",
+    "SkillAutoUpdater",
     "SkillRegistry",
+    "SkillUpdate",
+    "ToolUsageRecord",
 ]
