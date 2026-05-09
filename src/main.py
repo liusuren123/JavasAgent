@@ -15,6 +15,7 @@ from rich.prompt import Prompt
 
 from src.agents.base_agent import BaseAgent
 from src.platforms import create_platform_adapter
+from src.tools.browser_control import BrowserControl
 from src.tools.code_dev import CodeDev
 from src.tools.system_control import SystemControl
 from src.utils.config import load_config
@@ -44,6 +45,12 @@ def create_agent() -> BaseAgent:
         code_dev = CodeDev(llm_client=agent._llm)
         agent.register_tool("code_dev", code_dev)
         logger.info("代码开发工具已注册")
+
+    # 注册浏览器控制工具
+    if config.tools.browser_control.enabled:
+        browser = BrowserControl()
+        agent.register_tool("browser_control", browser)
+        logger.info("浏览器控制工具已注册")
 
     # 初始化长期记忆（异步操作，用 asyncio.run）
     try:

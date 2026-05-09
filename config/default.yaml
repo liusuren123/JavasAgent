@@ -82,4 +82,4 @@ tools:
     enabled: false  # Phase 5 启用
   
   browser_control:
-    enabled: false  # Phase 4 启用
+    enabled: true  # Phase 2 已实现，启用浏览器自动化
