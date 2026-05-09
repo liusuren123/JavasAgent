@@ -18,6 +18,7 @@ from src.agents.feedback_handler import (
     classify_feedback,
     handle_pending_feedback,
 )
+from src.agents.learning_integration import LearningIntegration
 from src.agents.team_integration import TeamIntegrationMixin
 from src.core.decider import Decider
 from src.core.executor import Executor
@@ -75,6 +76,11 @@ class BaseAgent(TeamIntegrationMixin):
         self._pending: PendingDecision | None = None
         self._last_failed_plan: TaskPlan | None = None
 
+        # 技能学习集成
+        self._learning = LearningIntegration(
+            storage_dir=config.memory.long_term_db_path.replace("chroma", "learning"),
+        )
+
         # 多 Agent 团队集成（通过 Mixin）
         self._init_team_integration(config)
 
@@ -109,6 +115,16 @@ class BaseAgent(TeamIntegrationMixin):
         context = await self._build_context_with_recall(user_input)
         if screen_context:
             context += f"\n\n屏幕感知:\n{screen_context}"
+
+        # 2.5 技能学习：检查可复用技能
+        try:
+            skill_suggestions = await self._learning.on_planning_start(context)
+            if skill_suggestions:
+                names = [s.suggested_name for s in skill_suggestions]
+                logger.info(f"发现可复用技能建议: {names}")
+        except Exception as e:
+            logger.warning(f"技能学习查询失败: {e}")
+
         plan = await self._planner.plan(user_input, context)
 
         # 3. 决策检查（基于计划复杂度估算 confidence）
@@ -179,6 +195,13 @@ class BaseAgent(TeamIntegrationMixin):
         finally:
             self._scheduler.mark_done(plan, result.success if result else False)
             self._running = False
+
+        # 技能学习：记录执行历史
+        if result is not None:
+            try:
+                await self._learning.on_execution_complete(plan, result)
+            except Exception as e:
+                logger.warning(f"技能学习记录失败: {e}")
 
         if result is None:
             response = f"❌ 执行发生异常，请重试。目标: {plan.intent}"
@@ -283,13 +306,15 @@ class BaseAgent(TeamIntegrationMixin):
         return await self._screen_analyzer.describe(screenshot)
 
     async def initialize_memory(self) -> None:
-        """初始化长期记忆（ChromaDB）。
+        """初始化长期记忆（ChromaDB）和技能学习模块。
 
         需要在 Agent 首次使用前调用，初始化持久化存储。
         如果 ChromaDB 不可用，会优雅降级。
         """
         await self._long_term_memory.initialize()
         logger.info(f"长期记忆初始化完成: {self._long_term_memory.count} 条已有记录")
+        await self._learning.initialize()
+        logger.info(f"技能学习模块初始化完成: {self._learning.pattern_count} 个已有模式")
 
     async def remember(self, content: str, category: str = "experience", **metadata: Any) -> str | None:
         """将信息存入长期记忆。
@@ -422,6 +447,12 @@ class BaseAgent(TeamIntegrationMixin):
         关闭 LLM 连接池，清理工具资源，清理长期记忆引用。
         调用后 Agent 不再可用。
         """
+        # 持久化技能学习数据
+        try:
+            await self._learning.save()
+        except Exception as e:
+            logger.warning(f"技能学习数据保存失败: {e}")
+
         if self._llm is not None:
             await self._llm.close()
             logger.info("LLM 连接池已关闭")
@@ -464,4 +495,7 @@ class BaseAgent(TeamIntegrationMixin):
                 self._long_term_memory.count if self._long_term_memory else 0
             ),
             "pending_decision": self._pending is not None,
+            "learning_patterns": self._learning.pattern_count,
+            "learning_suggestions": self._learning.suggestion_count,
+            "registered_skills": self._learning.registered_count,
         }
