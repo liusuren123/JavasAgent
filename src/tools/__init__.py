@@ -17,6 +17,7 @@ from src.tools.photoshop_control import PhotoshopControl
 from src.tools.premiere_control import PremiereControl
 from src.tools.process_manager import ProcessManager
 from src.tools.system_control import SystemControl
+from src.tools.network_ops import NetworkOps
 from src.tools.voice_ops import VoiceOps
 
 
@@ -52,6 +53,7 @@ TOOL_REGISTRY: dict[str, type] = {
     "aftereffects_control": AfterEffectsControl,
     "voice_ops": VoiceOps,
     "clipboard": ClipboardOps,
+    "network_ops": NetworkOps,
 }
 
 # 工具元数据：名称 → _ToolMeta
@@ -101,5 +103,8 @@ TOOL_METADATA: dict[str, _ToolMeta] = {
     ),
     "aftereffects_control": _ToolMeta(
         description="After Effects 控制：特效与合成自动化",
+    ),
+    "network_ops": _ToolMeta(
+        description="网络操作：HTTP 请求、文件下载、网络检测、API 调用",
     ),
 }

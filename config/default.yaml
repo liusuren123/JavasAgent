@@ -119,3 +119,11 @@ tools:
 
   aftereffects_control:
     enabled: true
+
+  network_ops:
+    enabled: true
+    timeout: 30.0
+    retries: 3
+    retry_delay: 1.0
+    download_workspace: "."
+    # proxy: "http://proxy:8080"
