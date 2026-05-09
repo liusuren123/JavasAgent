@@ -16,6 +16,7 @@ from src.core.executor import Executor
 from src.core.models import ExecutionResult, PlanStatus, StepStatus, TaskPlan
 from src.core.planner import Planner
 from src.core.scheduler import Scheduler
+from src.core.workflow_engine import WorkflowEngine
 from src.memory.long_term import LongTermMemory
 from src.memory.short_term import ShortTermMemory
 from src.perception.screen_analyzer import ScreenAnalyzer
@@ -82,6 +83,7 @@ class BaseAgent:
         self._executor = Executor()
         self._decider = Decider(config.agent)
         self._scheduler = Scheduler()
+        self._workflow_engine = WorkflowEngine()
         self._memory = ShortTermMemory(config.memory.short_term_max_messages)
         self._long_term_memory = LongTermMemory(config.memory)
         self._screen_analyzer = ScreenAnalyzer(self._llm, config.perception)
@@ -331,6 +333,44 @@ class BaseAgent:
         if desc:
             self._planner.register_tool(name, desc)
 
+        # 同步注册到工作流引擎，使工作流可调用该工具
+        self._workflow_engine.register_tool(name, tool)
+
+    async def run_workflow(
+        self,
+        workflow_name_or_id: str,
+        context: dict[str, Any] | None = None,
+    ) -> str:
+        """执行已定义的工作流。
+
+        Agent 可通过 LLM 决策调用此方法来执行多步骤工作流。
+
+        Args:
+            workflow_name_or_id: 工作流名称或 ID
+            context: 模板变量上下文
+
+        Returns:
+            执行结果描述
+        """
+        result = await self._workflow_engine.run_workflow(workflow_name_or_id, context)
+
+        if result.status.value == "success":
+            return (
+                f"✅ 工作流执行完成: {result.workflow_id}\n"
+                f"状态: {result.status.value}, 耗时 {result.total_time:.2f}s"
+            )
+        elif result.status.value == "partial":
+            skipped = sum(1 for r in result.step_results if r.skipped)
+            return (
+                f"⚠️ 工作流部分完成: {result.workflow_id}\n"
+                f"跳过步骤: {skipped}, 耗时 {result.total_time:.2f}s"
+            )
+        else:
+            return (
+                f"❌ 工作流执行失败: {result.workflow_id}\n"
+                f"错误: {result.error_summary}"
+            )
+
     async def analyze_screen(self, screenshot: bytes) -> str:
         """分析屏幕截图。
 
@@ -520,6 +560,7 @@ class BaseAgent:
         return {
             "running": self._running,
             "scheduler": self._scheduler.get_status(),
+            "workflow_engine": len(self._workflow_engine.list_workflows()),
             "memory_size": self._memory.size,
             "long_term_memory_count": (
                 self._long_term_memory.count if self._long_term_memory else 0
