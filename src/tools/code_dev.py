@@ -5,13 +5,13 @@
 
 from __future__ import annotations
 
-import asyncio
 import re
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
+from src.utils.command import run_command
 from src.utils.path_safety import PathSafetyError, safe_resolve_path
 
 
@@ -344,27 +344,8 @@ class CodeDev:
         timeout: int = 60,
     ) -> dict:
         """执行命令行并返回结果。"""
-        command = " ".join(cmd_parts)
-        logger.debug(f"执行命令: {command}")
-
-        try:
-            proc = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=str(self._workspace),
-            )
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout
-            )
-            return {
-                "returncode": proc.returncode,
-                "stdout": stdout.decode("utf-8", errors="replace"),
-                "stderr": stderr.decode("utf-8", errors="replace"),
-            }
-        except asyncio.TimeoutError:
-            logger.error(f"命令超时 ({timeout}s): {command[:100]}")
-            return {"error": f"命令超时 ({timeout}s): {command[:100]}"}
-        except Exception as e:
-            logger.error(f"命令执行失败: {e}")
-            return {"error": str(e)}
+        return await run_command(
+            cmd_parts,
+            cwd=str(self._workspace),
+            timeout=timeout,
+        )

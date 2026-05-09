@@ -2,6 +2,7 @@
 
 支持多提供商（智谱、OpenAI 等）的统一 LLM 调用接口。
 支持纯文本和多模态（图片+文本）消息。
+使用连接池复用 HTTP 连接，减少每次请求的建连开销。
 """
 
 from __future__ import annotations
@@ -20,11 +21,39 @@ MultimodalContent = str | list[dict[str, Any]]
 
 
 class LLMClient:
-    """统一的 LLM 调用客户端。"""
+    """统一的 LLM 调用客户端。
+
+    使用持久化的 httpx.AsyncClient 连接池，避免每次请求都新建 TCP 连接。
+    连接池在 ``close()`` 或对象析构时释放。
+    """
 
     def __init__(self, config: LLMConfig) -> None:
         self._config = config
+        # 连接池：按 provider 缓存 AsyncClient 实例
         self._clients: dict[str, httpx.AsyncClient] = {}
+
+    async def close(self) -> None:
+        """关闭所有连接池，释放资源。"""
+        for name, client in self._clients.items():
+            await client.aclose()
+            logger.debug(f"LLM 连接池已关闭: {name}")
+        self._clients.clear()
+
+    def _get_client(self, provider_name: str) -> httpx.AsyncClient:
+        """获取或创建指定 provider 的连接池。
+
+        Args:
+            provider_name: 提供商名称（用于缓存 key）
+
+        Returns:
+            复用的 AsyncClient 实例
+        """
+        if provider_name not in self._clients:
+            self._clients[provider_name] = httpx.AsyncClient(
+                timeout=httpx.Timeout(120.0, connect=10.0),
+                limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+            )
+        return self._clients[provider_name]
 
     def _get_api_key(self, provider: LLMProviderConfig) -> str:
         """从环境变量获取 API Key。"""
@@ -83,15 +112,15 @@ class LLMClient:
 
         url = f"{prov.base_url.rstrip('/')}/chat/completions"
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            logger.debug(f"LLM 请求: provider={name}, model={prov.model}")
-            resp = await client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
+        client = self._get_client(name)
+        logger.debug(f"LLM 请求: provider={name}, model={prov.model}")
+        resp = await client.post(url, headers=headers, json=payload)
+        resp.raise_for_status()
 
-            data = resp.json()
-            content = data["choices"][0]["message"]["content"]
-            logger.debug(f"LLM 响应长度: {len(content)} 字符")
-            return content
+        data = resp.json()
+        content = data["choices"][0]["message"]["content"]
+        logger.debug(f"LLM 响应长度: {len(content)} 字符")
+        return content
 
     async def chat_with_system(
         self,

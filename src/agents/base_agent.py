@@ -125,8 +125,8 @@ class BaseAgent:
         if self._is_screen_related(user_input):
             screen_context = await self._analyze_screen_if_available()
 
-        # 2. 规划
-        context = self._build_context()
+        # 2. 规划（使用包含长期记忆检索的上下文）
+        context = await self._build_context_with_recall(user_input)
         if screen_context:
             context += f"\n\n屏幕感知:\n{screen_context}"
         plan = await self._planner.plan(user_input, context)
@@ -369,7 +369,11 @@ class BaseAgent:
         return max(0.1, min(1.0, confidence))
 
     def _build_context(self) -> str:
-        """构建当前上下文信息（同步部分，不含长期记忆检索）。"""
+        """构建当前上下文信息。
+
+        注意：此方法是同步的，不包含长期记忆语义检索。
+        长期记忆的语义检索应在 ``process()`` 中异步调用后注入 context。
+        """
         parts: list[str] = []
 
         if self._memory.size > 0:
@@ -391,6 +395,38 @@ class BaseAgent:
             parts.append(f"\n长期记忆: {ltm_count} 条记录")
 
         return "\n".join(parts)
+
+    async def _build_context_with_recall(self, user_input: str) -> str:
+        """构建包含长期记忆语义检索的上下文。
+
+        基于 ``_build_context()`` 的基础上，额外从长期记忆中检索
+        与当前用户输入相关的历史经验，丰富上下文信息。
+
+        Args:
+            user_input: 当前用户输入
+
+        Returns:
+            包含长期记忆检索结果的完整上下文
+        """
+        context = self._build_context()
+
+        # 从长期记忆检索相关经验
+        if self._long_term_memory.is_available and user_input.strip():
+            try:
+                memories = await self._long_term_memory.recall(
+                    user_input, top_k=3, category=None
+                )
+                if memories:
+                    memory_parts = []
+                    for mem in memories:
+                        memory_parts.append(
+                            f"  [{mem.category}] {mem.content[:150]}"
+                        )
+                    context += "\n\n相关历史记忆:\n" + "\n".join(memory_parts)
+            except Exception as e:
+                logger.debug(f"长期记忆检索跳过: {e}")
+
+        return context
 
     @property
     def is_running(self) -> bool:

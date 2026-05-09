@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 import shutil
 from pathlib import Path
@@ -13,6 +12,7 @@ from typing import Any
 
 from loguru import logger
 
+from src.utils.command import run_command
 from src.utils.path_safety import PathSafetyError, safe_resolve_path
 
 
@@ -146,23 +146,11 @@ class SystemControl:
         timeout = params.get("timeout", 60)
         cwd = params.get("cwd", str(self._workspace))
 
-        try:
-            proc = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=cwd,
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-            return {
-                "returncode": proc.returncode,
-                "stdout": stdout.decode("utf-8", errors="replace"),
-                "stderr": stderr.decode("utf-8", errors="replace"),
-            }
-        except asyncio.TimeoutError:
-            return {"error": f"命令超时 ({timeout}s): {command[:100]}"}
-        except Exception as e:
-            return {"error": str(e)}
+        return await run_command(
+            [command],
+            cwd=cwd,
+            timeout=timeout,
+        )
 
     async def _get_system_info(self, params: dict) -> dict:
         """获取系统信息。"""
