@@ -60,6 +60,7 @@ async def run_command(
     cwd: str | None = None,
     timeout: int = 60,
     env: dict[str, str] | None = None,
+    raw_command: bool = False,
 ) -> dict[str, Any]:
     """执行命令行并返回结果。
 
@@ -68,12 +69,17 @@ async def run_command(
         cwd: 工作目录，默认当前目录
         timeout: 超时秒数
         env: 额外环境变量
+        raw_command: 为 True 时直接取 cmd_parts[0] 作为完整 shell 命令，
+            不对参数做引号拼接。适用于用户输入的完整命令字符串场景。
 
     Returns:
         包含 returncode, stdout, stderr 的字典，
         超时或异常时包含 error 字段
     """
-    command = " ".join(_quote_arg(str(p)) for p in cmd_parts)
+    if raw_command:
+        command = cmd_parts[0] if cmd_parts else ""
+    else:
+        command = " ".join(_quote_arg(str(p)) for p in cmd_parts)
     logger.debug(f"执行命令: {command}")
 
     try:

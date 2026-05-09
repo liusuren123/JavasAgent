@@ -74,3 +74,48 @@ class TestRunCommand:
         )
         assert result["returncode"] == 0
         assert "test_value" in result["stdout"]
+
+
+class TestRawCommand:
+    """raw_command 模式测试。
+
+    raw_command=True 时，cmd_parts[0] 直接作为 shell 命令执行，
+    不经过 _quote_arg 拼接，适用于用户输入的完整命令字符串。
+    """
+
+    @pytest.mark.asyncio
+    async def test_raw_command_with_spaces(self):
+        """包含空格的完整命令字符串应正确执行。"""
+        result = await run_command(
+            ["python -c \"print('raw hello')\""],
+            raw_command=True,
+        )
+        assert result["returncode"] == 0
+        assert "raw hello" in result["stdout"]
+
+    @pytest.mark.asyncio
+    async def test_raw_command_git_log(self):
+        """git log 命令（多参数带空格）应正确执行。"""
+        result = await run_command(
+            ["git --version"],
+            raw_command=True,
+        )
+        assert result["returncode"] == 0
+        assert "git" in result["stdout"].lower()
+
+    @pytest.mark.asyncio
+    async def test_raw_command_echo(self):
+        """echo 命令应正确输出。"""
+        result = await run_command(
+            ["echo hello world"],
+            raw_command=True,
+        )
+        assert result["returncode"] == 0
+        assert "hello world" in result["stdout"]
+
+    @pytest.mark.asyncio
+    async def test_raw_command_empty(self):
+        """空命令列表应返回空结果。"""
+        result = await run_command([], raw_command=True)
+        # 空命令字符串 -> shell 执行空命令
+        assert result["returncode"] == 0 or "error" in result

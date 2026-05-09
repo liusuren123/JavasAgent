@@ -141,8 +141,14 @@ class SystemControl:
         return {"created": str(path)}
 
     async def _run_command(self, params: dict) -> dict:
-        """执行终端命令。"""
+        """执行终端命令。
+
+        传入的 command 为完整的 shell 命令字符串（如 ``"git log -5 --oneline"``）。
+        通过 ``run_command`` 的 ``raw_command`` 模式执行，避免参数被错误引号包裹。
+        """
         command = params.get("command", "")
+        if not command:
+            return {"error": "缺少参数: command"}
         timeout = params.get("timeout", 60)
         cwd = params.get("cwd", str(self._workspace))
 
@@ -150,6 +156,7 @@ class SystemControl:
             [command],
             cwd=cwd,
             timeout=timeout,
+            raw_command=True,
         )
 
     async def _get_system_info(self, params: dict) -> dict:
