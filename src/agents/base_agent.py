@@ -16,6 +16,7 @@ from src.core.executor import Executor
 from src.core.models import TaskPlan
 from src.core.planner import Planner
 from src.core.scheduler import Scheduler
+from src.memory.long_term import LongTermMemory
 from src.memory.short_term import ShortTermMemory
 from src.perception.screen_analyzer import ScreenAnalyzer
 from src.platforms.base import PlatformAdapter
@@ -80,6 +81,7 @@ class BaseAgent:
         self._decider = Decider(config.agent)
         self._scheduler = Scheduler()
         self._memory = ShortTermMemory(config.memory.short_term_max_messages)
+        self._long_term_memory = LongTermMemory(config.memory)
         self._screen_analyzer = ScreenAnalyzer(self._llm, config.perception)
         self._platform = platform
 
@@ -292,6 +294,41 @@ class BaseAgent:
         """
         return await self._screen_analyzer.describe(screenshot)
 
+    async def initialize_memory(self) -> None:
+        """初始化长期记忆（ChromaDB）。
+
+        需要在 Agent 首次使用前调用，初始化持久化存储。
+        如果 ChromaDB 不可用，会优雅降级。
+        """
+        await self._long_term_memory.initialize()
+        logger.info(f"长期记忆初始化完成: {self._long_term_memory.count} 条已有记录")
+
+    async def remember(self, content: str, category: str = "experience", **metadata: Any) -> str | None:
+        """将信息存入长期记忆。
+
+        Args:
+            content: 要记忆的内容
+            category: 分类（experience / knowledge / preference / skill）
+            **metadata: 附加元数据
+
+        Returns:
+            记忆条目 ID，失败返回 None
+        """
+        return await self._long_term_memory.store(content, category=category, metadata=metadata)
+
+    async def recall(self, query: str, top_k: int = 5, category: str | None = None) -> list:
+        """从长期记忆中检索相关信息。
+
+        Args:
+            query: 查询文本
+            top_k: 返回最多 K 条结果
+            category: 限定分类
+
+        Returns:
+            记忆条目列表
+        """
+        return await self._long_term_memory.recall(query, top_k=top_k, category=category)
+
     def _is_screen_related(self, user_input: str) -> bool:
         """判断用户输入是否涉及屏幕操作。"""
         return any(kw in user_input for kw in self._SCREEN_KEYWORDS)
@@ -332,7 +369,7 @@ class BaseAgent:
         return max(0.1, min(1.0, confidence))
 
     def _build_context(self) -> str:
-        """构建当前上下文信息。"""
+        """构建当前上下文信息（同步部分，不含长期记忆检索）。"""
         parts: list[str] = []
 
         if self._memory.size > 0:
@@ -348,6 +385,11 @@ class BaseAgent:
             status = self._scheduler.get_status()
             parts.append(f"\n当前运行中的任务: {status['running']} 个")
 
+        # 添加长期记忆统计信息
+        ltm_count = self._long_term_memory.count
+        if ltm_count > 0:
+            parts.append(f"\n长期记忆: {ltm_count} 条记录")
+
         return "\n".join(parts)
 
     @property
@@ -362,5 +404,6 @@ class BaseAgent:
             "running": self._running,
             "scheduler": self._scheduler.get_status(),
             "memory_size": self._memory.size,
+            "long_term_memory_count": self._long_term_memory.count,
             "pending_decision": self._pending is not None,
         }

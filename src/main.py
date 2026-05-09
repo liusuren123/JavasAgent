@@ -45,6 +45,13 @@ def create_agent() -> BaseAgent:
         agent.register_tool("code_dev", code_dev)
         logger.info("代码开发工具已注册")
 
+    # 初始化长期记忆（异步操作，用 asyncio.run）
+    try:
+        asyncio.run(agent.initialize_memory())
+    except RuntimeError:
+        # 已有事件循环时跳过（如在 async 上下文中被调用）
+        logger.debug("跳过长期记忆初始化（事件循环已存在）")
+
     return agent
 
 
