@@ -24,6 +24,7 @@ from src.tools.photoshop_control import PhotoshopControl
 from src.tools.premiere_control import PremiereControl
 from src.tools.process_manager import ProcessManager
 from src.tools.system_control import SystemControl
+from src.tools.system_monitor import SystemMonitor
 from src.tools.network_ops import NetworkOps
 from src.tools.smart_scheduler import SmartScheduler
 from src.tools.voice_ops import VoiceOps
@@ -63,6 +64,7 @@ TOOL_REGISTRY: dict[str, type] = {
     "clipboard": ClipboardOps,
     "network_ops": NetworkOps,
     "smart_scheduler": SmartScheduler,
+    "system_monitor": SystemMonitor,
 }
 
 # 工具元数据：名称 → _ToolMeta
@@ -118,5 +120,8 @@ TOOL_METADATA: dict[str, _ToolMeta] = {
     ),
     "smart_scheduler": _ToolMeta(
         description="智能调度：时间安排、日程优化、冲突检测、每日计划生成",
+    ),
+    "system_monitor": _ToolMeta(
+        description="系统监控：CPU/内存/磁盘资源监控、进程排行、阈值告警、系统快照",
     ),
 }
