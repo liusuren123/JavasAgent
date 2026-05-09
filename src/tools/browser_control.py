@@ -557,9 +557,9 @@ class BrowserControl:
             return {"error": "缺少参数: url 或 save_path"}
 
         try:
-            # 使用 page 触发下载
+            # 使用 page.evaluate 传参，避免 JS 注入
             async with self._page.expect_download(timeout=params.get("timeout", 60000)) as download_info:
-                await self._page.evaluate(f"window.location.href = '{url}'")
+                await self._page.evaluate("url => window.location.href = url", url)
             download = await download_info.value
 
             dest = Path(save_path)
