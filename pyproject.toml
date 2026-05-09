@@ -27,6 +27,7 @@ dependencies = [
     "click>=8.0",
     "watchdog>=4.0",
     "psutil>=5.9",
+    "winotify>=1.1; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]

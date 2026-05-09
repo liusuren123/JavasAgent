@@ -67,6 +67,9 @@ class NotificationManager:
         }
         self._lock = asyncio.Lock()
 
+        # 自动注册 DesktopNotifier 作为默认通知渠道
+        self._register_desktop_notifier()
+
     async def notify(
         self,
         title: str,
@@ -170,6 +173,23 @@ class NotificationManager:
             "unread": unread,
             "by_level": by_level,
         }
+
+    def _register_desktop_notifier(self) -> None:
+        """自动注册 DesktopNotifier 作为默认通知渠道。
+
+        如果初始化失败不影响 NotificationManager 本身。
+        """
+        try:
+            from src.core.desktop_notifier import DesktopNotifier
+
+            notifier_config = self._config.get("desktop_notifier", {})
+            notifier = DesktopNotifier(config=notifier_config)
+            if notifier.enabled:
+                for level in NotificationLevel:
+                    self.register_handler(level, notifier)
+                logger.debug("DesktopNotifier 已注册为默认通知渠道")
+        except Exception as e:
+            logger.warning(f"DesktopNotifier 注册失败，桌面通知不可用: {e}")
 
     def _apply_rules(
         self,
