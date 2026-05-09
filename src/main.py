@@ -15,8 +15,10 @@ from rich.prompt import Prompt
 from rich.table import Table
 
 from src.agents.base_agent import BaseAgent
+from src.core.voice_chat import VoiceChatConfig, VoiceChatLoop
 from src.platforms import create_platform_adapter
 from src.tools.registry import ToolRegistry
+from src.tools.voice_ops import VoiceOps
 from src.utils.config import load_config
 from src.utils.logger import get_logger, setup_logger
 
@@ -128,6 +130,63 @@ def chat() -> None:
                     console.print(f"[red]错误: {e}[/red]")
 
     asyncio.run(_chat_loop())
+
+
+@cli.command()
+@click.option("--wake-word", "-w", default="", help="唤醒词（空则不需要唤醒词）")
+@click.option("--tts-rate", "-r", default=0, type=int, help="TTS 语速 (-10~10)")
+def voice(wake_word: str, tts_rate: int) -> None:
+    """启动语音对话模式。"""
+    console.print(
+        Panel(
+            "[bold cyan]JavasAgent[/bold cyan] v0.1.0 — 语音模式\n"
+            "像贾维斯一样的语音助手\n"
+            "说出 [bold]退出[/bold] 或按 [bold]Ctrl+C[/bold] 结束",
+            title="🎤 Voice Mode",
+            border_style="cyan",
+        )
+    )
+
+    agent = create_agent()
+    voice_ops = VoiceOps()
+    chat_config = VoiceChatConfig(
+        wake_word=wake_word,
+        tts_rate=tts_rate,
+    )
+
+    # 状态映射表
+    state_labels = {
+        "listening": "[bold yellow]🎤 正在听...[/bold yellow]",
+        "thinking": "[bold magenta]🧠 思考中...[/bold magenta]",
+        "speaking": "[bold green]🔊 回复中...[/bold green]",
+        "idle": "[dim]等待中...[/dim]",
+        "error": "[bold red]⚠️ 出错了，正在恢复...[/bold red]",
+    }
+
+    def on_state_change(state: str) -> None:
+        """打印当前状态提示。"""
+        label = state_labels.get(state, state)
+        console.print(f"\r{label}", end="")
+
+    voice_loop = VoiceChatLoop(agent, voice_ops, chat_config)
+    voice_loop.set_state_callback(on_state_change)
+
+    async def _voice_chat_loop() -> None:
+        async with agent:
+            await agent.initialize_memory()
+            try:
+                await voice_loop.start()
+            except KeyboardInterrupt:
+                pass
+            finally:
+                if voice_loop.is_running:
+                    await voice_loop.stop()
+                console.print("\n[dim]语音模式已退出。[/dim]")
+
+    try:
+        asyncio.run(_voice_chat_loop())
+    except KeyboardInterrupt:
+        console.print("\n[dim]再见，老板。[/dim]")
 
 
 @cli.command()
