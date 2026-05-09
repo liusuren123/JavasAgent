@@ -139,10 +139,10 @@
 - [ ] 邮件处理
 - [x] 浏览器自动化
 
-### Phase 5: 创意工具
-- [ ] Photoshop 脚本控制
-- [ ] Premiere 自动剪辑
-- [ ] 其他 Adobe 工具
+### Phase 5: 创意工具 ✅
+- [x] Photoshop 脚本控制
+- [x] Premiere 自动剪辑
+- [x] After Effects 脚本控制
 
 ### Phase 6: 高级能力
 - [ ] 语音交互
