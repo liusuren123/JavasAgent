@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.agents.base_agent import BaseAgent
+from src.agents.base_agent import BaseAgent, PendingAction, PendingDecision
 from src.core.executor import ExecutionResult
 from src.core.models import (
     DecisionPoint,
@@ -38,6 +38,40 @@ def _make_plan(intent: str = "测试计划", n_steps: int = 1) -> TaskPlan:
         steps=steps,
         priority=Priority.NORMAL,
     )
+
+
+def _setup_agent_with_mocks(
+    plan: TaskPlan | None = None,
+    auto_decided: bool = True,
+    exec_success: bool = True,
+) -> tuple[BaseAgent, MagicMock, AsyncMock, MagicMock]:
+    """创建一个 mock 好子组件的 Agent，返回 (agent, decider, executor, planner)。"""
+    config = _make_config()
+    agent = BaseAgent(config)
+
+    mock_plan = plan or _make_plan()
+
+    agent._planner = AsyncMock()
+    agent._planner.plan.return_value = mock_plan
+
+    mock_result = ExecutionResult(
+        plan_id="plan_test",
+        success=exec_success,
+        completed_steps=1 if exec_success else 0,
+        total_steps=1,
+        errors=[] if exec_success else ["步骤0 执行失败"],
+        output={},
+    )
+    agent._executor = AsyncMock()
+    agent._executor.execute.return_value = mock_result
+
+    agent._decider = MagicMock()
+    agent._decider.evaluate.return_value = DecisionPoint(
+        context="测试", question="测试",
+        confidence=0.9, auto_decided=auto_decided,
+    )
+
+    return agent, agent._decider, agent._executor, agent._planner
 
 
 class TestRegisterTool:
@@ -89,6 +123,7 @@ class TestStatus:
         assert s["running"] is False
         assert s["memory_size"] == 0
         assert s["scheduler"]["running"] == 0
+        assert s["pending_decision"] is False
 
     def test_status_with_memory(self) -> None:
         config = _make_config()
@@ -100,6 +135,14 @@ class TestStatus:
         config = _make_config()
         agent = BaseAgent(config)
         assert agent.is_running is False
+
+    def test_pending_decision_in_status(self) -> None:
+        config = _make_config()
+        agent = BaseAgent(config)
+        agent._pending = PendingDecision(
+            plan=_make_plan(), question="确认?", confidence=0.3,
+        )
+        assert agent.status["pending_decision"] is True
 
 
 class TestEstimateConfidence:
@@ -152,27 +195,7 @@ class TestProcess:
     @pytest.mark.asyncio
     async def test_process_auto_execute(self) -> None:
         """confidence 高且无风险关键词 → 自动执行。"""
-        config = _make_config()
-        agent = BaseAgent(config)
-
-        mock_plan = _make_plan("读取文件", 1)
-
-        agent._planner = AsyncMock()
-        agent._planner.plan.return_value = mock_plan
-
-        mock_result = ExecutionResult(
-            plan_id="plan_test", success=True,
-            completed_steps=1, total_steps=1, errors=[], output={},
-        )
-        agent._executor = AsyncMock()
-        agent._executor.execute.return_value = mock_result
-
-        # Mock decider to auto-decide
-        agent._decider = MagicMock()
-        agent._decider.evaluate.return_value = DecisionPoint(
-            context="读取文件", question="读取文件",
-            confidence=0.9, auto_decided=True,
-        )
+        agent, _, _, _ = _setup_agent_with_mocks(auto_decided=True, exec_success=True)
 
         response = await agent.process("帮我读取文件")
         assert "✅" in response
@@ -181,48 +204,19 @@ class TestProcess:
 
     @pytest.mark.asyncio
     async def test_process_needs_human(self) -> None:
-        """低 confidence → 询问人类。"""
-        config = _make_config()
-        agent = BaseAgent(config)
-
-        mock_plan = _make_plan("删除文件", 1)
-        agent._planner = AsyncMock()
-        agent._planner.plan.return_value = mock_plan
-
-        agent._decider = MagicMock()
-        agent._decider.evaluate.return_value = DecisionPoint(
-            context="删除文件", question="删除文件",
-            confidence=0.3, auto_decided=False,
-        )
+        """低 confidence → 询问人类，保存 pending。"""
+        agent, _, _, _ = _setup_agent_with_mocks(auto_decided=False)
 
         response = await agent.process("帮我删除文件")
         assert "确认" in response
+        assert agent._pending is not None
         # executor should NOT have been called
-        assert agent._executor.is_busy is False
+        agent._executor.execute.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_process_execution_failure(self) -> None:
         """执行失败时的回复。"""
-        config = _make_config()
-        agent = BaseAgent(config)
-
-        mock_plan = _make_plan("测试任务", 1)
-        agent._planner = AsyncMock()
-        agent._planner.plan.return_value = mock_plan
-
-        mock_result = ExecutionResult(
-            plan_id="plan_test", success=False,
-            completed_steps=0, total_steps=1,
-            errors=["步骤0 执行失败"], output={},
-        )
-        agent._executor = AsyncMock()
-        agent._executor.execute.return_value = mock_result
-
-        agent._decider = MagicMock()
-        agent._decider.evaluate.return_value = DecisionPoint(
-            context="安全", question="安全",
-            confidence=0.9, auto_decided=True,
-        )
+        agent, _, _, _ = _setup_agent_with_mocks(auto_decided=True, exec_success=False)
 
         response = await agent.process("执行测试任务")
         assert "❌" in response
@@ -231,30 +225,128 @@ class TestProcess:
     @pytest.mark.asyncio
     async def test_process_adds_to_memory(self) -> None:
         """每次 process 应该在记忆中存储用户输入和回复。"""
-        config = _make_config()
-        agent = BaseAgent(config)
-
-        mock_plan = _make_plan()
-        agent._planner = AsyncMock()
-        agent._planner.plan.return_value = mock_plan
-
-        agent._decider = MagicMock()
-        agent._decider.evaluate.return_value = DecisionPoint(
-            context="x", question="x", confidence=0.9, auto_decided=True,
-        )
-
-        mock_result = ExecutionResult(
-            plan_id="plan_test", success=True,
-            completed_steps=1, total_steps=1, errors=[], output={},
-        )
-        agent._executor = AsyncMock()
-        agent._executor.execute.return_value = mock_result
+        agent, _, _, _ = _setup_agent_with_mocks()
 
         await agent.process("hello")
         msgs = agent._memory.get_messages()
         assert msgs[0].role == "user"
         assert msgs[0].content == "hello"
         assert msgs[1].role == "assistant"
+
+
+class TestFeedbackLoop:
+    """测试反馈循环：确认/取消/重新规划。"""
+
+    @pytest.mark.asyncio
+    async def test_confirm_executes_plan(self) -> None:
+        """用户确认后应执行之前暂停的计划。"""
+        agent, _, _, _ = _setup_agent_with_mocks(auto_decided=False, exec_success=True)
+
+        # 第一次调用触发询问
+        await agent.process("帮我删除文件")
+        assert agent._pending is not None
+
+        # 用户确认
+        response = await agent.process("确认")
+        assert "✅" in response
+        assert agent._pending is None
+        agent._executor.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_cancel_aborts_plan(self) -> None:
+        """用户取消应放弃计划。"""
+        agent, _, _, _ = _setup_agent_with_mocks(auto_decided=False)
+
+        await agent.process("帮我删除文件")
+        assert agent._pending is not None
+
+        response = await agent.process("取消")
+        assert "取消" in response
+        assert agent._pending is None
+        agent._executor.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_replan_creates_new_plan(self) -> None:
+        """用户要求重新规划。"""
+        agent, _, _, planner = _setup_agent_with_mocks(auto_decided=False)
+
+        new_plan = _make_plan("重新规划的任务", 2)
+        planner.replan.return_value = new_plan
+
+        await agent.process("帮我删除文件")
+
+        response = await agent.process("重新规划一下")
+        assert "重新规划" in response
+        assert agent._pending is not None  # 新计划也需要确认
+        planner.replan.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_feedback_method_is_alias(self) -> None:
+        """feedback() 方法应等同于 process()。"""
+        agent, _, _, _ = _setup_agent_with_mocks(auto_decided=False)
+
+        await agent.process("帮我删除文件")
+        response = await agent.feedback("确认")
+        assert "✅" in response
+
+    @pytest.mark.asyncio
+    async def test_non_feedback_input_clears_pending(self) -> None:
+        """如果用户输入不是反馈关键词，应走正常流程。"""
+        agent, _, _, _ = _setup_agent_with_mocks(auto_decided=False)
+
+        await agent.process("帮我删除文件")
+        assert agent._pending is not None
+
+        # 用户说了一句完全不相关的话
+        response = await agent.process("今天天气怎么样")
+        # 应该走正常流程（而不是反馈处理），planner.plan 应被再次调用
+        assert agent._planner.plan.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_cancel_keywords_variants(self) -> None:
+        """多种取消关键词都应生效。"""
+        for keyword in ["算了", "不要了", "放弃"]:
+            agent, _, _, _ = _setup_agent_with_mocks(auto_decided=False)
+            await agent.process("删除文件")
+            response = await agent.process(keyword)
+            assert "取消" in response
+
+    @pytest.mark.asyncio
+    async def test_confirm_keywords_variants(self) -> None:
+        """多种确认关键词都应生效。"""
+        for keyword in ["确定", "好的", "执行吧"]:
+            agent, _, _, _ = _setup_agent_with_mocks(auto_decided=False, exec_success=True)
+            await agent.process("删除文件")
+            response = await agent.process(keyword)
+            assert "✅" in response
+
+
+class TestClassifyFeedback:
+    """测试 _classify_feedback 方法。"""
+
+    def test_confirm_keywords(self) -> None:
+        config = _make_config()
+        agent = BaseAgent(config)
+        for kw in ["确认", "确定", "yes", "ok", "Y"]:
+            assert agent._classify_feedback(kw) == PendingAction.CONFIRM
+
+    def test_cancel_keywords(self) -> None:
+        config = _make_config()
+        agent = BaseAgent(config)
+        for kw in ["取消", "算了", "cancel", "NO"]:
+            assert agent._classify_feedback(kw) == PendingAction.CANCEL
+
+    def test_replan_keywords(self) -> None:
+        config = _make_config()
+        agent = BaseAgent(config)
+        for kw in ["重试", "重新", "调整", "retry"]:
+            assert agent._classify_feedback(kw) == PendingAction.REPLAN
+
+    def test_normal_text(self) -> None:
+        config = _make_config()
+        agent = BaseAgent(config)
+        assert agent._classify_feedback("帮我写个函数") == PendingAction.NONE
+        assert agent._classify_feedback("今天天气怎么样") == PendingAction.NONE
 
 
 class TestScreenIntegration:

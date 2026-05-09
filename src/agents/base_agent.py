@@ -1,10 +1,12 @@
 """基础 Agent 类。
 
-实现感知→规划→执行→反思的核心循环。
+实现感知→规划→执行→反馈的核心循环。
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 from loguru import logger
@@ -21,6 +23,28 @@ from src.utils.config import AppConfig
 from src.utils.llm_client import LLMClient
 
 
+class PendingAction(str, Enum):
+    """待处理的用户反馈动作类型。"""
+
+    CONFIRM = "confirm"       # 用户确认执行之前被暂停的计划
+    CANCEL = "cancel"         # 用户取消执行
+    REPLAN = "replan"         # 用户要求重新规划
+    NONE = "none"             # 无待处理动作
+
+
+@dataclass
+class PendingDecision:
+    """等待用户反馈的决策上下文。
+
+    当 Decider 判定需要询问人类时，保存完整上下文以便后续处理反馈。
+    """
+
+    plan: TaskPlan
+    question: str
+    confidence: float
+    screen_context: str = ""
+
+
 class BaseAgent:
     """JavasAgent 基础 Agent。
 
@@ -30,7 +54,19 @@ class BaseAgent:
     3. 决策：判断是否需要询问人类
     4. 执行：按步骤执行
     5. 反馈：报告执行结果
+
+    支持反馈循环：当需要人类确认或执行失败时，通过 ``feedback()`` 继续。
     """
+
+    # 用户确认的关键词映射
+    _CONFIRM_KEYWORDS: frozenset[str] = frozenset({
+        "确认", "确定", "是的", "好的", "可以", "执行吧",
+        "yes", "ok", "sure", "go", "do it", "y",
+    })
+    _CANCEL_KEYWORDS: frozenset[str] = frozenset({
+        "取消", "算了", "不要了", "停", "放弃",
+        "cancel", "no", "stop", "abort", "n",
+    })
 
     def __init__(
         self,
@@ -49,6 +85,10 @@ class BaseAgent:
 
         self._running = False
 
+        # 反馈循环状态
+        self._pending: PendingDecision | None = None
+        self._last_failed_plan: TaskPlan | None = None
+
     # 屏幕操作相关的关键词
     _SCREEN_KEYWORDS: tuple[str, ...] = (
         "屏幕", "截图", "截屏", "画面", "桌面", "窗口",
@@ -59,6 +99,9 @@ class BaseAgent:
     async def process(self, user_input: str) -> str:
         """处理用户输入（核心入口）。
 
+        如果存在待确认的决策，会优先检查用户输入是否为对上次询问的回复。
+        否则按正常流程：感知→规划→决策→执行→反馈。
+
         Args:
             user_input: 用户的自然语言指令
 
@@ -67,6 +110,13 @@ class BaseAgent:
         """
         logger.info(f"收到用户输入: {user_input[:100]}...")
         self._memory.add("user", user_input)
+
+        # 0. 反馈循环：如果有待确认的决策，优先处理
+        if self._pending is not None:
+            response = await self._handle_pending_feedback(user_input)
+            if response is not None:
+                return response
+            # 用户输入不是反馈，继续走正常流程
 
         # 1. 屏幕感知：如果任务涉及屏幕操作，先截屏分析上下文
         screen_context = ""
@@ -88,28 +138,142 @@ class BaseAgent:
         )
 
         if not decision.auto_decided:
-            response = f"我需要确认一下：{decision.question}"
+            # 保存待确认的决策上下文，等用户反馈
+            self._pending = PendingDecision(
+                plan=plan,
+                question=decision.question,
+                confidence=confidence,
+                screen_context=screen_context,
+            )
+            response = (
+                f"⚠️ 需要确认：{decision.question}\n"
+                f"计划包含 {len(plan.steps)} 个步骤。回复「确认」执行，回复「取消」放弃，"
+                f"或描述你想要的调整。"
+            )
             self._memory.add("assistant", response)
             return response
 
         # 4. 提交并执行
+        return await self._execute_plan(plan)
+
+    async def feedback(self, user_response: str) -> str:
+        """对上一次需要确认或执行失败的决策提供反馈。
+
+        这是对 ``process()`` 的补充入口，专为交互式场景设计。
+        如果当前没有待处理的状态，会回退到普通 ``process()``。
+
+        Args:
+            user_response: 用户的反馈内容
+
+        Returns:
+            处理结果或回复
+        """
+        return await self.process(user_response)
+
+    async def _handle_pending_feedback(self, user_input: str) -> str | None:
+        """处理用户对上次待确认决策的反馈。
+
+        Args:
+            user_input: 用户输入
+
+        Returns:
+            回复字符串（如果匹配反馈模式），否则返回 None 表示走正常流程
+        """
+        pending = self._pending
+        self._pending = None  # 清除待处理状态
+
+        action = self._classify_feedback(user_input)
+
+        if action == PendingAction.CONFIRM:
+            logger.info("用户确认执行计划")
+            return await self._execute_plan(pending.plan)
+
+        if action == PendingAction.CANCEL:
+            response = "🚫 已取消任务。"
+            self._memory.add("assistant", response)
+            return response
+
+        if action == PendingAction.REPLAN:
+            logger.info("用户要求重新规划")
+            reason = f"用户反馈：{user_input}"
+            try:
+                new_plan = await self._planner.replan(pending.plan, reason)
+                response = (
+                    f"📋 已重新规划（{len(new_plan.steps)} 步）：{new_plan.intent}\n"
+                    f"回复「确认」执行新计划。"
+                )
+                self._pending = PendingDecision(
+                    plan=new_plan,
+                    question=new_plan.intent,
+                    confidence=pending.confidence,
+                    screen_context=pending.screen_context,
+                )
+            except Exception as e:
+                logger.error(f"重新规划失败: {e}")
+                response = f"❌ 重新规划失败: {e}"
+            self._memory.add("assistant", response)
+            return response
+
+        # 未匹配任何反馈模式，说明用户开始了新对话
+        # 恢复 pending 状态... 其实不需要，用户已经转向了
+        return None
+
+    async def _execute_plan(self, plan: TaskPlan) -> str:
+        """提交并执行任务计划，返回结果回复。"""
         task_id = await self._scheduler.submit(plan)
         self._scheduler.mark_running(plan)
-        result = await self._executor.execute(plan)
-        self._scheduler.mark_done(plan, result.success)
 
-        # 5. 构建回复
-        if result.success:
+        try:
+            result = await self._executor.execute(plan)
+        except Exception as e:
+            logger.error(f"执行异常: {e}")
+            result = None
+        finally:
+            self._scheduler.mark_done(plan, result.success if result else False)
+
+        if result is None:
+            response = f"❌ 执行发生异常，请重试。目标: {plan.intent}"
+            self._last_failed_plan = plan
+        elif result.success:
             response = (
                 f"✅ 任务完成 ({result.completed_steps}/{result.total_steps} 步)\n"
                 f"目标: {plan.intent}"
             )
+            self._last_failed_plan = None
         else:
             errors_str = "; ".join(result.errors)
-            response = f"❌ 任务执行出现问题:\n{errors_str}"
+            self._last_failed_plan = plan
+            response = (
+                f"❌ 任务执行出现问题:\n{errors_str}\n\n"
+                f"回复「重试」重新执行，或描述如何调整。"
+            )
 
         self._memory.add("assistant", response)
         return response
+
+    def _classify_feedback(self, user_input: str) -> PendingAction:
+        """将用户输入分类为反馈动作。
+
+        Args:
+            user_input: 用户输入文本
+
+        Returns:
+            对应的 PendingAction 枚举值
+        """
+        text = user_input.strip().lower()
+
+        if text in self._CONFIRM_KEYWORDS:
+            return PendingAction.CONFIRM
+
+        if text in self._CANCEL_KEYWORDS:
+            return PendingAction.CANCEL
+
+        # 包含重试/重新规划意图的关键词
+        replan_keywords = {"重试", "重新", "换", "调整", "retry", "replan", "redo", "change", "adjust"}
+        if any(kw in text for kw in replan_keywords):
+            return PendingAction.REPLAN
+
+        return PendingAction.NONE
 
     def register_tool(self, name: str, tool: Any) -> None:
         """注册工具到执行引擎。"""
@@ -198,4 +362,5 @@ class BaseAgent:
             "running": self._running,
             "scheduler": self._scheduler.get_status(),
             "memory_size": self._memory.size,
+            "pending_decision": self._pending is not None,
         }
