@@ -9,6 +9,7 @@ from typing import Any
 
 from loguru import logger
 
+from src.core.execution_observer import ExecutionObserver
 from src.core.models import ExecutionResult, PlanStatus, Step, StepStatus, TaskPlan
 
 # Re-export ExecutionResult for backward compatibility (tests import from this module)
@@ -21,11 +22,17 @@ class Executor:
     def __init__(self) -> None:
         self._current_plan: TaskPlan | None = None
         self._tool_registry: dict[str, Any] = {}
+        self._observers: list[ExecutionObserver] = []
 
     def register_tool(self, name: str, tool: Any) -> None:
         """注册工具实例。"""
         self._tool_registry[name] = tool
         logger.info(f"注册工具: {name}")
+
+    def add_observer(self, observer: ExecutionObserver) -> None:
+        """添加执行观察者。"""
+        self._observers.append(observer)
+        logger.debug(f"添加执行观察者: {observer.__class__.__name__}")
 
     @property
     def is_busy(self) -> bool:
@@ -89,7 +96,7 @@ class Executor:
         plan.status = PlanStatus.DONE if success else PlanStatus.FAILED
         self._current_plan = None
 
-        return ExecutionResult(
+        execution_result = ExecutionResult(
             plan_id=plan.id,
             success=success,
             completed_steps=completed,
@@ -97,6 +104,15 @@ class Executor:
             errors=errors,
             output={},
         )
+
+        # 通知观察者计划执行完成
+        for observer in self._observers:
+            try:
+                await observer.on_plan_done(plan, execution_result)
+            except Exception:
+                logger.exception("观察者 on_plan_done 异常")
+
+        return execution_result
 
     async def _execute_step(self, step: Step) -> Any:
         """执行单个步骤。"""
@@ -109,12 +125,22 @@ class Executor:
 
         try:
             if hasattr(tool, "execute"):
-                return await tool.execute(step.action, step.params)
+                result = await tool.execute(step.action, step.params)
             elif callable(tool):
-                return await tool(step.action, step.params)
+                result = await tool(step.action, step.params)
             else:
                 logger.error(f"工具 {step.tool} 没有可调用的接口")
                 return None
+
+            # 通知观察者（仅执行成功且有返回值时）
+            if result is not None:
+                for observer in self._observers:
+                    try:
+                        await observer.on_step_done(step, result, step.tool)
+                    except Exception:
+                        logger.exception("观察者 on_step_done 异常")
+
+            return result
         except Exception as e:
             logger.error(f"步骤 {step.id} 异常: {e}")
             step.error = str(e)
