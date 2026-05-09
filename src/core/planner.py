@@ -1,6 +1,7 @@
 """任务规划器。
 
 将用户意图解析为可执行的步骤链。
+支持动态工具注册，使 LLM 只规划当前可用的工具。
 """
 
 from __future__ import annotations
@@ -14,47 +15,101 @@ from loguru import logger
 from src.core.models import Priority, Step, TaskPlan
 from src.utils.llm_client import LLMClient
 
-PLANNER_SYSTEM_PROMPT = """你是 JavasAgent 的任务规划引擎。
+# 默认工具描述（当没有注册自定义工具时使用）
+_DEFAULT_TOOL_DESCRIPTIONS: dict[str, str] = {
+    "system_control": "文件操作、进程管理、窗口控制",
+    "code_dev": "代码生成、调试、测试",
+    "office_ops": "Word/Excel/PPT 操作",
+    "creative_tools": "PS/PR 等 Adobe 工具",
+    "browser_control": "浏览器自动化",
+    "shell": "执行终端命令",
+}
+
+_PLANNER_PROMPT_TEMPLATE = """你是 JavasAgent 的任务规划引擎。
 
 你的职责是将用户的意图拆解为具体的、可执行的步骤列表。
 
 输出格式要求（严格 JSON）：
-{
+{{
     "intent_summary": "对用户意图的简要描述",
     "steps": [
-        {
+        {{
             "action": "动作描述",
             "tool": "使用的工具名称",
-            "params": {"key": "value"},
+            "params": {{"key": "value"}},
             "depends_on": []
-        }
+        }}
     ],
     "priority": 5,
     "need_clarification": false,
     "clarification_question": ""
-}
+}}
 
-可用工具列表：
-- system_control: 文件操作、进程管理、窗口控制
-- code_dev: 代码生成、调试、测试
-- office_ops: Word/Excel/PPT 操作
-- creative_tools: PS/PR 等 Adobe 工具
-- browser_control: 浏览器自动化
-- shell: 执行终端命令
+当前可用工具列表：
+{tool_list}
 
 注意：
 1. 每个步骤应该是原子性的，只做一件事
 2. depends_on 填写前置步骤的序号（从0开始）
 3. 如果用户意图不明确，设置 need_clarification=true 并提问
 4. priority 范围 0-20，默认 5
+5. 只能使用上面列出的工具，不要使用未列出的工具
 """
 
 
 class Planner:
-    """任务规划器。"""
+    """任务规划器。
+
+    支持动态注册工具描述，使生成的计划只使用已注册的工具。
+    如果没有注册任何工具描述，则使用默认的完整工具列表。
+
+    Usage::
+
+        planner = Planner(llm_client)
+        planner.register_tool("system_control", "文件操作、进程管理")
+        planner.register_tool("code_dev", "代码生成、调试")
+        plan = await planner.plan("帮我写个脚本")
+    """
 
     def __init__(self, llm: LLMClient) -> None:
         self._llm = llm
+        self._tool_descriptions: dict[str, str] = {}
+
+    def register_tool(self, name: str, description: str) -> None:
+        """注册工具描述，供规划时参考。
+
+        Args:
+            name: 工具名称（与 Executor 中注册的名称一致）
+            description: 工具功能简述
+        """
+        self._tool_descriptions[name] = description
+        logger.debug(f"规划器注册工具描述: {name}")
+
+    def unregister_tool(self, name: str) -> None:
+        """移除工具描述。"""
+        self._tool_descriptions.pop(name, None)
+
+    @property
+    def registered_tools(self) -> list[str]:
+        """已注册的工具名称列表。"""
+        return list(self._tool_descriptions.keys())
+
+    def _build_system_prompt(self) -> str:
+        """构建包含当前可用工具的系统提示。"""
+        # 如果有注册的工具描述，使用它们；否则使用默认列表
+        if self._tool_descriptions:
+            tool_lines = [
+                f"- {name}: {desc}"
+                for name, desc in self._tool_descriptions.items()
+            ]
+        else:
+            tool_lines = [
+                f"- {name}: {desc}"
+                for name, desc in _DEFAULT_TOOL_DESCRIPTIONS.items()
+            ]
+
+        tool_list = "\n".join(tool_lines)
+        return _PLANNER_PROMPT_TEMPLATE.format(tool_list=tool_list)
 
     async def plan(self, user_intent: str, context: str = "") -> TaskPlan:
         """将用户意图拆解为任务计划。
@@ -74,7 +129,7 @@ class Planner:
         prompt += "\n请输出任务计划的 JSON。"
 
         response = await self._llm.chat_with_system(
-            system_prompt=PLANNER_SYSTEM_PROMPT,
+            system_prompt=self._build_system_prompt(),
             user_message=prompt,
         )
 
@@ -102,7 +157,7 @@ class Planner:
         )
 
         response = await self._llm.chat_with_system(
-            system_prompt=PLANNER_SYSTEM_PROMPT,
+            system_prompt=self._build_system_prompt(),
             user_message=prompt,
         )
 
@@ -123,8 +178,14 @@ class Planner:
             data: dict[str, Any] = json.loads(text)
         except (json.JSONDecodeError, IndexError) as e:
             logger.warning(f"LLM 返回非 JSON 格式，创建单步计划: {e}")
+            # 回退到第一个可用工具或 shell
+            fallback_tool = (
+                self._tool_descriptions.keys().__iter__().__next__()
+                if self._tool_descriptions
+                else "shell"
+            )
             data = {
-                "steps": [{"action": original_intent, "tool": "shell", "params": {}}],
+                "steps": [{"action": original_intent, "tool": fallback_tool, "params": {}}],
                 "priority": 5,
             }
 

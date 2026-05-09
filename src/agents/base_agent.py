@@ -303,9 +303,30 @@ class BaseAgent:
 
         return PendingAction.NONE
 
-    def register_tool(self, name: str, tool: Any) -> None:
-        """注册工具到执行引擎。"""
+    # 工具描述映射：注册名 → 默认描述
+    _TOOL_DESCRIPTIONS: dict[str, str] = {
+        "system_control": "文件操作、进程管理、窗口控制",
+        "shell": "执行终端命令",
+        "code_dev": "代码生成、调试、测试、Git 操作、依赖管理",
+        "office_ops": "Word/Excel/PPT/PDF 文档操作",
+        "browser_control": "浏览器自动化（打开网页、截图、填表）",
+        "creative_tools": "创意工具（占位符）",
+    }
+
+    def register_tool(self, name: str, tool: Any, description: str | None = None) -> None:
+        """注册工具到执行引擎和规划器。
+
+        Args:
+            name: 工具名称
+            tool: 工具实例（必须实现 ``execute(action, params)`` 接口）
+            description: 工具功能描述，供规划器参考。
+                为 None 时使用内置描述表中的默认值。
+        """
         self._executor.register_tool(name, tool)
+        # 同步注册到规划器，使 LLM 只规划可用工具
+        desc = description or self._TOOL_DESCRIPTIONS.get(name, "")
+        if desc:
+            self._planner.register_tool(name, desc)
 
     async def analyze_screen(self, screenshot: bytes) -> str:
         """分析屏幕截图。

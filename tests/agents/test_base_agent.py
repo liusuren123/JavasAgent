@@ -84,6 +84,43 @@ class TestRegisterTool:
         agent.register_tool("my_tool", mock_tool)
         assert "my_tool" in agent._executor._tool_registry
 
+    def test_register_tool_with_description(self) -> None:
+        """带描述注册时，应同步注册到 Planner。"""
+        config = _make_config()
+        agent = BaseAgent(config)
+        mock_tool = MagicMock()
+        agent.register_tool("custom_tool", mock_tool, description="自定义工具描述")
+        assert "custom_tool" in agent._executor._tool_registry
+        assert "custom_tool" in agent._planner.registered_tools
+        assert agent._planner._tool_descriptions["custom_tool"] == "自定义工具描述"
+
+    def test_register_tool_uses_default_description(self) -> None:
+        """不传描述时，应使用内置描述表中的默认值。"""
+        config = _make_config()
+        agent = BaseAgent(config)
+        mock_tool = MagicMock()
+        agent.register_tool("system_control", mock_tool)
+        assert "system_control" in agent._planner.registered_tools
+        assert "文件操作" in agent._planner._tool_descriptions["system_control"]
+
+    def test_register_tool_unknown_name_no_description(self) -> None:
+        """未知工具名且不传描述时，规划器不应注册空描述。"""
+        config = _make_config()
+        agent = BaseAgent(config)
+        mock_tool = MagicMock()
+        agent.register_tool("unknown_tool", mock_tool)
+        assert "unknown_tool" in agent._executor._tool_registry
+        # 不在默认描述表中且无自定义描述 → 不应注册到 planner
+        assert "unknown_tool" not in agent._planner.registered_tools
+
+    def test_register_multiple_tools(self) -> None:
+        """注册多个工具应全部生效。"""
+        config = _make_config()
+        agent = BaseAgent(config)
+        for name, desc in [("tool_a", "工具A"), ("tool_b", "工具B")]:
+            agent.register_tool(name, MagicMock(), description=desc)
+        assert set(agent._planner.registered_tools) == {"tool_a", "tool_b"}
+
 
 class TestBuildContext:
     """测试上下文构建。"""

@@ -186,3 +186,103 @@ class TestReplan:
         new_plan = await planner.replan(original, "需要调整")
         # intent comes from _parse_plan which uses original_intent when no intent_summary
         assert new_plan.intent == "创建项目"
+
+
+class TestToolRegistration:
+    """测试规划器的动态工具注册功能。"""
+
+    def _make_planner(self) -> Planner:
+        mock_llm = AsyncMock()
+        return Planner(mock_llm)
+
+    def test_register_tool(self) -> None:
+        planner = self._make_planner()
+        planner.register_tool("my_tool", "自定义工具描述")
+        assert "my_tool" in planner.registered_tools
+        assert "my_tool" in planner._tool_descriptions
+        assert planner._tool_descriptions["my_tool"] == "自定义工具描述"
+
+    def test_register_multiple_tools(self) -> None:
+        planner = self._make_planner()
+        planner.register_tool("tool_a", "工具A")
+        planner.register_tool("tool_b", "工具B")
+        assert len(planner.registered_tools) == 2
+        assert "tool_a" in planner.registered_tools
+        assert "tool_b" in planner.registered_tools
+
+    def test_unregister_tool(self) -> None:
+        planner = self._make_planner()
+        planner.register_tool("my_tool", "描述")
+        planner.unregister_tool("my_tool")
+        assert "my_tool" not in planner.registered_tools
+
+    def test_unregister_nonexistent_tool(self) -> None:
+        planner = self._make_planner()
+        # Should not raise
+        planner.unregister_tool("nonexistent")
+
+    def test_system_prompt_with_registered_tools(self) -> None:
+        planner = self._make_planner()
+        planner.register_tool("system_control", "文件操作")
+        planner.register_tool("code_dev", "代码开发")
+        prompt = planner._build_system_prompt()
+        assert "system_control: 文件操作" in prompt
+        assert "code_dev: 代码开发" in prompt
+        assert "只能使用上面列出的工具" in prompt
+
+    def test_system_prompt_without_registered_tools_uses_defaults(self) -> None:
+        planner = self._make_planner()
+        prompt = planner._build_system_prompt()
+        # Should contain default tool descriptions
+        assert "system_control:" in prompt
+        assert "code_dev:" in prompt
+        assert "browser_control:" in prompt
+
+    def test_registered_tools_returns_names(self) -> None:
+        planner = self._make_planner()
+        planner.register_tool("alpha", "第一个")
+        planner.register_tool("beta", "第二个")
+        tools = planner.registered_tools
+        assert set(tools) == {"alpha", "beta"}
+
+    @pytest.mark.asyncio
+    async def test_plan_uses_dynamic_tools_in_prompt(self) -> None:
+        mock_llm = AsyncMock()
+        mock_llm.chat_with_system.return_value = json.dumps({
+            "intent_summary": "测试",
+            "steps": [{"action": "do", "tool": "custom_tool", "params": {}, "depends_on": []}],
+            "priority": 5,
+        })
+        planner = Planner(mock_llm)
+        planner.register_tool("custom_tool", "自定义工具")
+
+        await planner.plan("测试指令")
+        call_args = mock_llm.chat_with_system.call_args
+        system_prompt = call_args.kwargs.get("system_prompt", call_args[1].get("system_prompt", ""))
+        assert "custom_tool: 自定义工具" in system_prompt
+
+    @pytest.mark.asyncio
+    async def test_replan_uses_dynamic_tools(self) -> None:
+        mock_llm = AsyncMock()
+        mock_llm.chat_with_system.return_value = '{"steps": [], "priority": 5}'
+        planner = Planner(mock_llm)
+        planner.register_tool("special_tool", "特殊工具")
+
+        original = TaskPlan(id="plan_1", intent="原计划", steps=[])
+        await planner.replan(original, "需要重新规划")
+        call_args = mock_llm.chat_with_system.call_args
+        system_prompt = call_args.kwargs.get("system_prompt", call_args[1].get("system_prompt", ""))
+        assert "special_tool: 特殊工具" in system_prompt
+
+    def test_non_json_fallback_uses_registered_tool(self) -> None:
+        """当 LLM 返回非 JSON 时，fallback 应使用已注册的第一个工具。"""
+        planner = self._make_planner()
+        planner.register_tool("my_tool", "我的工具")
+        plan = planner._parse_plan("不是JSON", "测试意图")
+        assert plan.steps[0].tool == "my_tool"
+
+    def test_non_json_fallback_without_registered_tools_uses_shell(self) -> None:
+        """当没有注册工具且 LLM 返回非 JSON 时，fallback 使用 shell。"""
+        planner = self._make_planner()
+        plan = planner._parse_plan("不是JSON", "测试意图")
+        assert plan.steps[0].tool == "shell"
