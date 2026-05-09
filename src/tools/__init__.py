@@ -7,6 +7,7 @@ from src.tools.email_ops import EmailOps
 from src.tools.image_ops import ImageOps
 from src.tools.office_ops import OfficeOps
 from src.tools.photoshop_control import PhotoshopControl
+from src.tools.premiere_control import PremiereControl
 from src.tools.process_manager import ProcessManager
 from src.tools.system_control import SystemControl
 
@@ -21,4 +22,5 @@ TOOL_REGISTRY: dict[str, type] = {
     "office_ops": OfficeOps,
     "email_ops": EmailOps,
     "photoshop_control": PhotoshopControl,
+    "premiere_control": PremiereControl,
 }

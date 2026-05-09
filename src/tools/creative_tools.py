@@ -1,7 +1,7 @@
 """创意工具集。
 
 提供 Photoshop、Premiere 等 Adobe 软件的脚本控制能力。
-Photoshop 操作已实现真实 COM 接口控制，其余仍为占位。
+Photoshop 和 Premiere 操作已实现真实 COM 接口控制。
 """
 
 from __future__ import annotations
@@ -35,9 +35,20 @@ class CreativeTools:
         "photoshop_close": "close_document",
     }
 
+    # Premiere action 前缀到 PremiereControl action 的映射
+    _PR_ACTION_MAP: dict[str, str] = {
+        "premiere_open_project": "open_project",
+        "premiere_get_project_info": "get_project_info",
+        "premiere_import_media": "import_media",
+        "premiere_add_clip": "add_clip_to_timeline",
+        "premiere_export_video": "export_video",
+        "premiere_get_sequence_info": "get_sequence_info",
+    }
+
     def __init__(self, workspace: str | None = None) -> None:
         self._workspace = workspace
         self._ps_control: Any = None
+        self._pr_control: Any = None
 
     def _get_ps_control(self) -> Any:
         """延迟初始化 PhotoshopControl。"""
@@ -46,6 +57,14 @@ class CreativeTools:
 
             self._ps_control = PhotoshopControl(workspace=self._workspace)
         return self._ps_control
+
+    def _get_pr_control(self) -> Any:
+        """延迟初始化 PremiereControl。"""
+        if self._pr_control is None:
+            from src.tools.premiere_control import PremiereControl
+
+            self._pr_control = PremiereControl(workspace=self._workspace)
+        return self._pr_control
 
     async def execute(self, action: str, params: dict[str, Any]) -> Any:
         """执行创意工具操作。
@@ -68,6 +87,16 @@ class CreativeTools:
             except Exception as e:
                 logger.error(f"Photoshop 操作失败: {e}")
                 return {"error": f"Photoshop 操作失败: {e}", "action": action}
+
+        # 检查是否为 Premiere 操作
+        pr_action = self._PR_ACTION_MAP.get(action)
+        if pr_action is not None:
+            try:
+                pr = self._get_pr_control()
+                return await pr.execute(pr_action, params)
+            except Exception as e:
+                logger.error(f"Premiere 操作失败: {e}")
+                return {"error": f"Premiere 操作失败: {e}", "action": action}
 
         logger.warning(f"创意工具集尚未实现: {action}")
         return {
