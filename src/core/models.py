@@ -72,6 +72,15 @@ class TaskPlan:
     created_at: datetime = field(default_factory=datetime.now)
     status: PlanStatus = PlanStatus.PENDING
     parent_id: str | None = None
+    _step_index: dict[str, Step] = field(default_factory=dict, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        """构建步骤索引。"""
+        self._rebuild_index()
+
+    def _rebuild_index(self) -> None:
+        """重建步骤 ID 到 Step 的索引字典。"""
+        self._step_index = {s.id: s for s in self.steps}
 
     @property
     def progress(self) -> float:
@@ -97,11 +106,8 @@ class TaskPlan:
         return None
 
     def _get_step(self, step_id: str) -> Step | None:
-        """根据 ID 获取步骤。"""
-        for s in self.steps:
-            if s.id == step_id:
-                return s
-        return None
+        """根据 ID 获取步骤（O(1) 查找）。"""
+        return self._step_index.get(step_id)
 
     def __lt__(self, other: TaskPlan) -> bool:
         """用于优先级队列排序（优先级值越大越优先，降序）。"""

@@ -13,7 +13,7 @@ from loguru import logger
 
 from src.core.decider import Decider
 from src.core.executor import Executor
-from src.core.models import ExecutionResult, TaskPlan
+from src.core.models import ExecutionResult, PlanStatus, StepStatus, TaskPlan
 from src.core.planner import Planner
 from src.core.scheduler import Scheduler
 from src.memory.long_term import LongTermMemory
@@ -193,11 +193,11 @@ class BaseAgent:
             logger.info(f"用户要求重试失败任务: {failed.intent}")
             # 重置所有步骤状态，以便重新执行
             for step in failed.steps:
-                step.status = step.status.__class__.PENDING
+                step.status = StepStatus.PENDING
                 step.retry_count = 0
                 step.result = None
                 step.error = None
-            failed.status = failed.status.__class__.PENDING
+            failed.status = PlanStatus.PENDING
             return await self._execute_plan(failed)
 
         if self._pending is not None:

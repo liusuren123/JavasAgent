@@ -17,6 +17,7 @@ from src.agents.base_agent import BaseAgent
 from src.platforms import create_platform_adapter
 from src.tools.browser_control import BrowserControl
 from src.tools.code_dev import CodeDev
+from src.tools.office_ops import OfficeOps
 from src.tools.system_control import SystemControl
 from src.utils.config import load_config
 from src.utils.logger import get_logger, setup_logger
@@ -51,6 +52,12 @@ def create_agent() -> BaseAgent:
         browser = BrowserControl()
         agent.register_tool("browser_control", browser)
         logger.info("浏览器控制工具已注册（懒初始化模式）")
+
+    # 注册办公自动化工具
+    if config.tools.office_ops.enabled:
+        office = OfficeOps()
+        agent.register_tool("office_ops", office)
+        logger.info("办公自动化工具已注册")
 
     return agent
 
