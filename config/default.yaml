@@ -78,17 +78,44 @@ email:
 tools:
   system_control:
     enabled: true
-  
+
+  process_manager:
+    enabled: true
+
   code_dev:
     enabled: true
     workspace: "./workspace"
     test_command: "pytest"
-  
+
   office_ops:
-    enabled: false  # Phase 4 启用
-  
-  creative_tools:
-    enabled: false  # Phase 5 启用
-  
+    enabled: true
+
   browser_control:
-    enabled: true  # Phase 2 已实现，启用浏览器自动化
+    enabled: true
+
+  email_ops:
+    enabled: true
+
+  calendar_ops:
+    enabled: true
+
+  creative_tools:
+    enabled: true
+
+  image_ops:
+    enabled: true
+
+  voice_ops:
+    enabled: true
+
+  clipboard:
+    enabled: true
+
+  photoshop_control:
+    enabled: true
+
+  premiere_control:
+    enabled: true
+
+  aftereffects_control:
+    enabled: true

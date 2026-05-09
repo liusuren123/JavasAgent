@@ -15,19 +15,8 @@ from rich.prompt import Prompt
 from rich.table import Table
 
 from src.agents.base_agent import BaseAgent
-from src.core.agent_team import AgentTeam
 from src.platforms import create_platform_adapter
-from src.tools.browser_control import BrowserControl
-from src.tools.calendar_ops import CalendarOps
-from src.tools.clipboard_ops import ClipboardOps
-from src.tools.code_dev import CodeDev
-from src.tools.creative_tools import CreativeTools
-from src.tools.email_ops import EmailOps
-from src.tools.image_ops import ImageOps
-from src.tools.office_ops import OfficeOps
-from src.tools.process_manager import ProcessManager
-from src.tools.system_control import SystemControl
-from src.tools.voice_ops import VoiceOps
+from src.tools.registry import ToolRegistry
 from src.utils.config import load_config
 from src.utils.logger import get_logger, setup_logger
 
@@ -43,71 +32,8 @@ def create_agent() -> BaseAgent:
     platform_adapter = create_platform_adapter(config)
     agent = BaseAgent(config, platform=platform_adapter)
 
-    # 注册系统控制工具
-    if config.tools.system_control.enabled:
-        system_tool = SystemControl()
-        agent.register_tool("system_control", system_tool)
-        agent.register_tool("shell", system_tool)
-        logger.info("系统控制工具已注册")
-
-        # 剪贴板归入系统控制大类
-        clipboard = ClipboardOps()
-        agent.register_tool("clipboard", clipboard)
-        logger.info("剪贴板工具已注册")
-
-    # 注册代码开发工具
-    if config.tools.code_dev.enabled:
-        code_dev = CodeDev(llm_client=agent._llm)
-        agent.register_tool("code_dev", code_dev)
-        logger.info("代码开发工具已注册")
-
-    # 注册浏览器控制工具（懒初始化：首次 execute 时自动调用 initialize）
-    if config.tools.browser_control.enabled:
-        browser = BrowserControl()
-        agent.register_tool("browser_control", browser)
-        logger.info("浏览器控制工具已注册（懒初始化模式）")
-
-    # 注册办公自动化工具
-    if config.tools.office_ops.enabled:
-        office = OfficeOps()
-        agent.register_tool("office_ops", office)
-        logger.info("办公自动化工具已注册")
-
-    # 注册图片处理工具
-    if config.tools.image_ops.enabled:
-        image_ops = ImageOps()
-        agent.register_tool("image_ops", image_ops)
-        logger.info("图片处理工具已注册")
-
-    # 注册邮件工具
-    if config.tools.email_ops.enabled:
-        email_ops = EmailOps()
-        agent.register_tool("email_ops", email_ops)
-        logger.info("邮件工具已注册")
-
-    # 注册日历工具
-    if config.tools.calendar_ops.enabled:
-        calendar_ops = CalendarOps()
-        agent.register_tool("calendar_ops", calendar_ops)
-        logger.info("日历工具已注册")
-
-    # 注册语音工具
-    if config.tools.voice_ops.enabled:
-        voice_ops = VoiceOps()
-        agent.register_tool("voice_ops", voice_ops)
-        logger.info("语音工具已注册")
-
-    # 注册创意工具
-    if config.tools.creative_tools.enabled:
-        creative_tools = CreativeTools()
-        agent.register_tool("creative_tools", creative_tools)
-        logger.info("创意工具已注册")
-
-    # 注册进程管理工具
-    if config.tools.process_manager.enabled:
-        process_manager = ProcessManager()
-        agent.register_tool("process_manager", process_manager)
-        logger.info("进程管理工具已注册")
+    # 自动注册所有已启用的工具
+    ToolRegistry.auto_register(agent, config)
 
     # 多 Agent 团队初始化
     if config.team.enabled and agent._team is not None:

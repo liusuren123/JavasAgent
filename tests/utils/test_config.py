@@ -58,10 +58,21 @@ class TestDefaultConfig:
 
     def test_default_tools_config(self) -> None:
         cfg = ToolsConfig()
+        # 所有已实现的工具默认启用
         assert cfg.system_control.enabled is True
         assert cfg.code_dev.enabled is True
-        assert cfg.office_ops.enabled is False
-        assert cfg.creative_tools.enabled is False
+        assert cfg.office_ops.enabled is True
+        assert cfg.creative_tools.enabled is True
+        assert cfg.browser_control.enabled is True
+        assert cfg.email_ops.enabled is True
+        assert cfg.calendar_ops.enabled is True
+        assert cfg.image_ops.enabled is True
+        assert cfg.voice_ops.enabled is True
+        assert cfg.process_manager.enabled is True
+        assert cfg.clipboard.enabled is True
+        assert cfg.photoshop_control.enabled is True
+        assert cfg.premiere_control.enabled is True
+        assert cfg.aftereffects_control.enabled is True
 
 
 class TestLoadConfig:

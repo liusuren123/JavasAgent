@@ -77,18 +77,25 @@ class ToolConfig(BaseModel):
 
 
 class ToolsConfig(BaseModel):
-    """工具集配置。"""
+    """工具集配置。
+
+    每个工具都有独立的 enabled 开关，配置文件中 tools.<name>.enabled 控制。
+    """
 
     system_control: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
+    process_manager: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
     code_dev: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
-    office_ops: ToolConfig = Field(default_factory=ToolConfig)
-    creative_tools: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
-    browser_control: ToolConfig = Field(default_factory=ToolConfig)
+    office_ops: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
+    browser_control: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
     email_ops: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
     calendar_ops: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
-    voice_ops: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
+    creative_tools: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
     image_ops: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
-    process_manager: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
+    voice_ops: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
+    clipboard: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
+    photoshop_control: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
+    premiere_control: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
+    aftereffects_control: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
 
 
 class AgentConfig(BaseModel):
