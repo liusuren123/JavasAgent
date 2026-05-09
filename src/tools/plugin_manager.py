@@ -18,27 +18,35 @@ plugin.yaml 格式::
     description: "一个示例插件"
     entry_point: main.py
     dependencies: []
+
+实际的验证逻辑委托给 plugin_validator，加载逻辑委托给 plugin_loader。
 """
 
 from __future__ import annotations
 
-import importlib
-import importlib.util
 import json
 import shutil
-import subprocess
-import sys
-import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import yaml
 from loguru import logger
 
+from src.tools.plugin_loader import (
+    clone_from_git,
+    copy_from_local,
+    load_module,
+    unload_module,
+)
 from src.tools.plugin_models import (
     PluginInfo,
     PluginManifest,
     PluginState,
+)
+from src.tools.plugin_validator import (
+    check_dependencies,
+    check_dependencies_enabled,
+    parse_manifest,
 )
 
 
@@ -121,11 +129,9 @@ class PluginManager:
 
         # 判断来源类型
         if source.startswith(("http://", "https://")) and source.endswith(".git"):
-            # Git URL
-            target_dir = await self._clone_from_git(source, plugin_id)
+            target_dir = await clone_from_git(source, self._plugins_dir, plugin_id)
         elif Path(source).exists():
-            # 本地路径
-            target_dir = await self._copy_from_local(source)
+            target_dir = await copy_from_local(source, self._plugins_dir)
         else:
             return {"success": False, "error": f"无效的安装源: {source}"}
 
@@ -138,7 +144,7 @@ class PluginManager:
             shutil.rmtree(target_dir, ignore_errors=True)
             return {"success": False, "error": "安装失败: 插件缺少 plugin.yaml"}
 
-        manifest, errors = self._parse_manifest(manifest_path)
+        manifest, errors = parse_manifest(manifest_path)
         if manifest is None:
             shutil.rmtree(target_dir, ignore_errors=True)
             return {"success": False, "error": f"plugin.yaml 校验失败: {'; '.join(errors)}"}
@@ -154,7 +160,7 @@ class PluginManager:
             actual_dir = renamed
 
         # 检查依赖
-        missing = self._check_dependencies(manifest)
+        missing = check_dependencies(manifest, self._plugins)
         if missing:
             logger.warning(f"插件 '{manifest.id}' 缺少依赖: {missing}")
 
@@ -170,7 +176,7 @@ class PluginManager:
             logger.info(f"覆盖安装插件: {manifest.id}")
             old_info = self._plugins[manifest.id]
             if old_info.loaded_module is not None:
-                self._unload_module(old_info)
+                unload_module(old_info)
 
         self._plugins[manifest.id] = info
         self._save_state()
@@ -193,7 +199,7 @@ class PluginManager:
 
         # 卸载模块
         if info.loaded_module is not None:
-            self._unload_module(info)
+            unload_module(info)
 
         # 删除文件
         if info.install_path and Path(info.install_path).exists():
@@ -240,13 +246,13 @@ class PluginManager:
             return {"success": True, "data": info.to_dict()}
 
         # 检查依赖是否全部已启用
-        missing = self._check_dependencies_enabled(info.manifest)
+        missing = check_dependencies_enabled(info.manifest, self._plugins)
         if missing:
             return {"success": False, "error": f"依赖插件未启用: {', '.join(missing)}"}
 
         # 加载模块
         try:
-            module = self._load_module(info)
+            module = load_module(info)
             info.loaded_module = module
             info.state = PluginState.ENABLED
             info.error_message = ""
@@ -275,7 +281,7 @@ class PluginManager:
 
         info = self._plugins[plugin_id]
         if info.loaded_module is not None:
-            self._unload_module(info)
+            unload_module(info)
         info.state = PluginState.DISABLED
         info.error_message = ""
         self._save_state()
@@ -298,12 +304,12 @@ class PluginManager:
 
         # 卸载旧模块
         if info.loaded_module is not None:
-            self._unload_module(info)
+            unload_module(info)
 
         # 重新解析 manifest
         manifest_path = Path(info.install_path) / "plugin.yaml"
         if manifest_path.exists():
-            manifest, errors = self._parse_manifest(manifest_path)
+            manifest, errors = parse_manifest(manifest_path)
             if manifest is not None:
                 info.manifest = manifest
             else:
@@ -311,7 +317,7 @@ class PluginManager:
 
         # 重新加载模块
         try:
-            module = self._load_module(info)
+            module = load_module(info)
             info.loaded_module = module
             info.state = PluginState.ENABLED
             info.error_message = ""
@@ -340,150 +346,6 @@ class PluginManager:
 
         info = self._plugins[plugin_id]
         return {"success": True, "data": info.to_dict(include_module=True)}
-
-    # ------------------------------------------------------------------
-    # 模块加载 / 卸载
-    # ------------------------------------------------------------------
-
-    def _load_module(self, info: PluginInfo) -> Any:
-        """使用 importlib 动态加载插件模块。"""
-        plugin_dir = Path(info.install_path)
-        entry_point = info.manifest.entry_point
-
-        # 支持两种 entry_point 格式：
-        # 1. 文件名: "main.py" → 加载 main.py
-        # 2. 模块路径: "mymodule.plugin" → 加载 mymodule/plugin.py
-        if entry_point.endswith(".py"):
-            module_file = plugin_dir / entry_point
-        else:
-            module_file = plugin_dir / entry_point.replace(".", "/") / "__init__.py"
-            if not module_file.exists():
-                module_file = plugin_dir / (entry_point.replace(".", "/") + ".py")
-
-        if not module_file.exists():
-            raise FileNotFoundError(f"入口文件不存在: {module_file}")
-
-        module_name = f"plugins.{info.plugin_id}.{entry_point.rstrip('.py')}"
-
-        # 如果模块已加载，先从 sys.modules 移除以实现重载
-        if module_name in sys.modules:
-            del sys.modules[module_name]
-
-        spec = importlib.util.spec_from_file_location(module_name, str(module_file))
-        if spec is None or spec.loader is None:
-            raise ImportError(f"无法创建模块规格: {module_file}")
-
-        # 将插件目录加入 sys.path，确保插件内部 import 正常
-        plugin_dir_str = str(plugin_dir)
-        if plugin_dir_str not in sys.path:
-            sys.path.insert(0, plugin_dir_str)
-
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[module_name] = module
-        spec.loader.exec_module(module)
-        logger.debug(f"加载插件模块: {module_name}")
-        return module
-
-    def _unload_module(self, info: PluginInfo) -> None:
-        """卸载插件模块。"""
-        entry_point = info.manifest.entry_point
-        module_name = f"plugins.{info.plugin_id}.{entry_point.rstrip('.py')}"
-        sys.modules.pop(module_name, None)
-        info.loaded_module = None
-        logger.debug(f"卸载插件模块: {module_name}")
-
-    # ------------------------------------------------------------------
-    # manifest 解析
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _parse_manifest(path: Path) -> tuple[PluginManifest | None, list[str]]:
-        """解析 plugin.yaml，返回 (manifest, errors)。"""
-        try:
-            raw = path.read_text(encoding="utf-8")
-            data = yaml.safe_load(raw)
-        except Exception as e:
-            return None, [f"读取或解析 YAML 失败: {e}"]
-
-        if not isinstance(data, dict):
-            return None, ["plugin.yaml 根元素应为字典"]
-
-        errors = PluginManifest.validate_dict(data)
-        if errors:
-            return None, errors
-
-        manifest = PluginManifest.from_dict(data)
-        return manifest, []
-
-    # ------------------------------------------------------------------
-    # 依赖检查
-    # ------------------------------------------------------------------
-
-    def _check_dependencies(self, manifest: PluginManifest) -> list[str]:
-        """检查插件依赖是否已安装。返回缺失的依赖 ID 列表。"""
-        missing = []
-        for dep_id in manifest.dependencies:
-            if dep_id not in self._plugins:
-                missing.append(dep_id)
-        return missing
-
-    def _check_dependencies_enabled(self, manifest: PluginManifest) -> list[str]:
-        """检查插件依赖是否已启用。返回未启用的依赖 ID 列表。"""
-        not_enabled = []
-        for dep_id in manifest.dependencies:
-            if dep_id not in self._plugins:
-                not_enabled.append(dep_id)
-            elif self._plugins[dep_id].state != PluginState.ENABLED:
-                not_enabled.append(dep_id)
-        return not_enabled
-
-    # ------------------------------------------------------------------
-    # 安装源处理
-    # ------------------------------------------------------------------
-
-    async def _clone_from_git(self, git_url: str, plugin_id: str | None) -> Path | None:
-        """从 Git URL 克隆插件。"""
-        self._plugins_dir.mkdir(parents=True, exist_ok=True)
-        target = self._plugins_dir / (plugin_id or Path(git_url).stem.replace(".git", ""))
-
-        if target.exists():
-            shutil.rmtree(target, ignore_errors=True)
-
-        try:
-            subprocess.run(
-                ["git", "clone", "--depth", "1", git_url, str(target)],
-                capture_output=True, text=True, timeout=120, check=True,
-            )
-            # 移除 .git 目录以节省空间
-            git_dir = target / ".git"
-            if git_dir.exists():
-                shutil.rmtree(git_dir, ignore_errors=True)
-            logger.info(f"从 Git 克隆插件到: {target}")
-            return target
-        except Exception as e:
-            logger.error(f"Git 克隆失败: {e}")
-            return None
-
-    async def _copy_from_local(self, source: str) -> Path | None:
-        """从本地路径复制插件。"""
-        src = Path(source).resolve()
-        if not src.is_dir():
-            logger.error(f"源路径不是目录: {src}")
-            return None
-
-        self._plugins_dir.mkdir(parents=True, exist_ok=True)
-        target = self._plugins_dir / src.name
-
-        if target.exists():
-            shutil.rmtree(target, ignore_errors=True)
-
-        try:
-            shutil.copytree(src, target)
-            logger.info(f"从本地复制插件到: {target}")
-            return target
-        except Exception as e:
-            logger.error(f"复制插件失败: {e}")
-            return None
 
     # ------------------------------------------------------------------
     # 持久化
@@ -525,7 +387,6 @@ class PluginManager:
 
                 install_time = p_data.get("install_time")
                 if isinstance(install_time, str):
-                    from datetime import datetime
                     install_time = datetime.fromisoformat(install_time)
 
                 info = PluginInfo(
@@ -539,7 +400,7 @@ class PluginManager:
                 # 已启用的插件需要重新加载模块
                 if state == PluginState.ENABLED:
                     try:
-                        module = self._load_module(info)
+                        module = load_module(info)
                         info.loaded_module = module
                     except Exception as e:
                         info.state = PluginState.ERROR
