@@ -12,6 +12,7 @@ from src.tools.photoshop_control import PhotoshopControl
 from src.tools.premiere_control import PremiereControl
 from src.tools.process_manager import ProcessManager
 from src.tools.system_control import SystemControl
+from src.tools.voice_ops import VoiceOps
 
 # 工具注册表：名称 → 类
 TOOL_REGISTRY: dict[str, type] = {
@@ -27,4 +28,5 @@ TOOL_REGISTRY: dict[str, type] = {
     "photoshop_control": PhotoshopControl,
     "premiere_control": PremiereControl,
     "aftereffects_control": AfterEffectsControl,
+    "voice_ops": VoiceOps,
 }
