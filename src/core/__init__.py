@@ -11,3 +11,9 @@ from src.core.agent_team import (  # noqa: F401
     TaskDistributor,
     TeamMessage,
 )
+from src.core.notification import (  # noqa: F401
+    Notification,
+    NotificationLevel,
+    NotificationManager,
+    NotificationRule,
+)
