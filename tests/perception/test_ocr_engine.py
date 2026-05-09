@@ -12,13 +12,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.perception.ocr_engine import (
-    OcrConfig,
     OcrEngine,
+    _FUZZY_THRESHOLD,
+)
+from src.perception.ocr_models import (
+    OcrConfig,
     OcrResult,
     TextBlock,
     TextElement,
     TextLocation,
-    _FUZZY_THRESHOLD,
 )
 
 

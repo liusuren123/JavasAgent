@@ -3,9 +3,9 @@
 提供屏幕内容分析、UI 元素定位和 OCR 文字识别能力。
 """
 
-from src.perception.ocr_engine import (
+from src.perception.ocr_engine import OcrEngine
+from src.perception.ocr_models import (
     OcrConfig,
-    OcrEngine,
     OcrResult,
     TextBlock,
     TextElement,

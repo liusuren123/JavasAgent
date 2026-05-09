@@ -8,66 +8,19 @@ from __future__ import annotations
 
 import asyncio
 import io
-from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Sequence
 
 from loguru import logger
 
-
-# ── 数据模型 ────────────────────────────────────────────────
-
-
-@dataclass
-class OcrConfig:
-    """OCR 配置。"""
-
-    engine: str = "tesseract"  # tesseract | easyocr
-    lang: str = "chi_sim+eng"
-    tesseract_cmd: str = ""  # tesseract 可执行文件路径（空则自动查找）
-    confidence_threshold: float = 0.6  # 置信度阈值
-
-
-@dataclass
-class TextBlock:
-    """识别到的文字块。"""
-
-    text: str
-    confidence: float
-    bbox: tuple[int, int, int, int]  # (x, y, w, h)
-    center: tuple[int, int]  # (cx, cy)
-
-
-@dataclass
-class OcrResult:
-    """OCR 识别结果。"""
-
-    full_text: str
-    blocks: list[TextBlock]
-    success: bool
-    error: str = ""
-
-
-@dataclass
-class TextLocation:
-    """文字定位结果。"""
-
-    text: str
-    bbox: tuple[int, int, int, int]
-    center: tuple[int, int]
-    confidence: float
-
-
-@dataclass
-class TextElement:
-    """可交互文字元素。"""
-
-    text: str
-    bbox: tuple[int, int, int, int]
-    center: tuple[int, int]
-    element_type: str  # "button", "menu_item", "label", "link", "text"
-    confidence: float
+from src.perception.ocr_models import (
+    OcrConfig,
+    OcrResult,
+    TextBlock,
+    TextElement,
+    TextLocation,
+)
 
 
 # ── 常量 ────────────────────────────────────────────────────
