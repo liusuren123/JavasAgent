@@ -17,7 +17,12 @@ from src.tools.office_docx import (
     edit_docx,
     read_docx,
 )
-from src.tools.office_pdf import read_pdf_text
+from src.tools.office_pdf import (
+    create_pdf,
+    extract_pages,
+    merge_pdfs,
+    read_pdf_text,
+)
 from src.tools.office_pptx import (
     create_pptx,
     edit_pptx,
@@ -73,6 +78,9 @@ class OfficeOps:
             "edit_pptx": edit_pptx,
             # PDF
             "read_pdf_text": read_pdf_text,
+            "create_pdf": create_pdf,
+            "merge_pdfs": merge_pdfs,
+            "extract_pages": extract_pages,
         }
 
         handler = handlers.get(action)
