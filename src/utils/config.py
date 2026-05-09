@@ -112,6 +112,22 @@ class PerceptionConfig(BaseModel):
     image_detail: str = "auto"  # low / high / auto
 
 
+class TeamConfig(BaseModel):
+    """多 Agent 团队配置。"""
+
+    enabled: bool = False
+    """是否启用多 Agent 协作模式。默认关闭，兼容单 Agent 模式。"""
+
+    name: str = "default-team"
+    """团队名称。"""
+
+    delegation_threshold: int = 5
+    """任务步骤数超过此阈值时，考虑委派子任务。"""
+
+    max_workers: int = 3
+    """最大工作 Agent 数量。"""
+
+
 class AppConfig(BaseModel):
     """应用全局配置。"""
 
@@ -121,6 +137,7 @@ class AppConfig(BaseModel):
     platform: PlatformConfig = Field(default_factory=PlatformConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     perception: PerceptionConfig = Field(default_factory=PerceptionConfig)
+    team: TeamConfig = Field(default_factory=TeamConfig)
 
 
 def load_config(config_path: str | Path | None = None) -> AppConfig:

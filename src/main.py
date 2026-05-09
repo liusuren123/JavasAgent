@@ -12,8 +12,10 @@ import click
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
+from rich.table import Table
 
 from src.agents.base_agent import BaseAgent
+from src.core.agent_team import AgentTeam
 from src.platforms import create_platform_adapter
 from src.tools.browser_control import BrowserControl
 from src.tools.calendar_ops import CalendarOps
@@ -101,7 +103,52 @@ def create_agent() -> BaseAgent:
         agent.register_tool("process_manager", process_manager)
         logger.info("进程管理工具已注册")
 
+    # 多 Agent 团队初始化
+    if config.team.enabled and agent._team is not None:
+        _init_team_members(agent, config)
+        logger.info(f"多 Agent 团队已初始化: {config.team.name}")
+
     return agent
+
+
+def _init_team_members(agent: BaseAgent, config: Any) -> None:
+    """为 Agent 团队添加默认成员。
+
+    根据配置中注册的工具，创建对应角色的子 Agent 并加入团队。
+
+    Args:
+        agent: 主 Agent 实例
+        config: 应用配置
+    """
+    if agent._team is None:
+        return
+
+    # 定义角色与对应能力的映射
+    role_capabilities: dict[str, tuple[str, list[str]]] = {
+        "coder": ("代码开发", ["code", "programming", "testing"]),
+        "researcher": ("信息搜索", ["search", "web", "analysis"]),
+        "operator": ("系统操作", ["system", "os", "file", "shell"]),
+    }
+
+    max_workers = config.team.max_workers
+    added = 0
+
+    async def _add() -> None:
+        nonlocal added
+        for role, (_, caps) in role_capabilities.items():
+            if added >= max_workers:
+                break
+            try:
+                await agent._team.add_agent(
+                    agent_id=f"{role}_1",
+                    role=role,
+                    capabilities=caps,
+                )
+                added += 1
+            except ValueError:
+                pass  # 已存在，跳过
+
+    asyncio.get_event_loop().run_until_complete(_add())
 
 
 @click.group()
@@ -278,6 +325,47 @@ def remember(content: str, category: str) -> None:
         console.print(f"✅ 已记忆: {entry_id} [{category}]")
     else:
         console.print("[red]记忆存储失败[/red]")
+
+
+@cli.command()
+def team() -> None:
+    """查看多 Agent 团队状态。"""
+    agent = create_agent()
+    ts = agent.get_team_status()
+
+    if not ts.get("enabled"):
+        console.print(
+            Panel(
+                "多 Agent 模式未启用。\n"
+                "在配置文件中设置 team.enabled=true 开启。",
+                title="👥 团队状态",
+                border_style="yellow",
+            )
+        )
+        return
+
+    table = Table(title=f"👥 团队: {ts.get('team_name', 'N/A')}", show_lines=True)
+    table.add_column("Agent ID", style="cyan", width=20)
+    table.add_column("角色", width=15)
+    table.add_column("状态", width=10)
+    table.add_column("能力", max_width=40)
+
+    for m in ts.get("members", []):
+        status_icon = {"idle": "🟢", "busy": "🔴", "offline": "⚫"}.get(
+            m.get("status", ""), "⚪"
+        )
+        table.add_row(
+            m.get("agent_id", ""),
+            m.get("role", ""),
+            f"{status_icon} {m.get('status', '')}",
+            ", ".join(m.get("capabilities", [])),
+        )
+
+    console.print(table)
+    console.print(
+        f"\n成员数: {ts.get('total_members', 0)} | "
+        f"已委派任务: {ts.get('delegated_tasks', 0)}"
+    )
 
 
 if __name__ == "__main__":

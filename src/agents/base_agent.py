@@ -18,6 +18,7 @@ from src.agents.feedback_handler import (
     classify_feedback,
     handle_pending_feedback,
 )
+from src.agents.team_integration import TeamIntegrationMixin
 from src.core.decider import Decider
 from src.core.executor import Executor
 from src.core.models import ExecutionResult, PlanStatus, StepStatus, TaskPlan
@@ -33,7 +34,7 @@ from src.utils.config import AppConfig
 from src.utils.llm_client import LLMClient
 
 
-class BaseAgent:
+class BaseAgent(TeamIntegrationMixin):
     """JavasAgent 基础 Agent。
 
     核心循环：
@@ -73,6 +74,9 @@ class BaseAgent:
         # 反馈循环状态
         self._pending: PendingDecision | None = None
         self._last_failed_plan: TaskPlan | None = None
+
+        # 多 Agent 团队集成（通过 Mixin）
+        self._init_team_integration(config)
 
     async def process(self, user_input: str) -> str:
         """处理用户输入（核心入口）。
@@ -130,6 +134,15 @@ class BaseAgent:
             )
             self._memory.add("assistant", response)
             return response
+
+        # 3.5 多 Agent 委派检查：如果步骤数超过阈值且有可用团队成员，自动委派
+        if await self.should_delegate(plan):
+            logger.info(
+                f"任务步骤数 ({len(plan.steps)}) 超过委派阈值，"
+                f"建议将部分子任务委派给团队成员"
+            )
+            # 当前仍然执行主计划，委派逻辑通过 delegate_task 手动触发
+            # 未来可以扩展为自动拆分并委派
 
         # 4. 提交并执行
         return await self._execute_plan(plan)
