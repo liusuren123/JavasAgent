@@ -66,6 +66,15 @@ platform:
   log_level: "INFO"
   log_path: "./data/logs"
 
+email:
+  smtp_host: ""
+  smtp_port: 587
+  imap_host: ""
+  imap_port: 993
+  address: ""
+  password: ""
+  use_tls: true
+
 tools:
   system_control:
     enabled: true
