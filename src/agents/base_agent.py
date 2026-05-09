@@ -20,6 +20,7 @@ from src.memory.long_term import LongTermMemory
 from src.memory.short_term import ShortTermMemory
 from src.perception.screen_analyzer import ScreenAnalyzer
 from src.platforms.base import PlatformAdapter
+from src.tools.image_ops import ImageOps
 from src.utils.config import AppConfig
 from src.utils.llm_client import LLMClient
 
@@ -312,6 +313,7 @@ class BaseAgent:
         "browser_control": "浏览器自动化（打开网页、截图、填表）",
         "creative_tools": "创意工具（占位符）",
         "email_ops": "邮件收发、搜索、文件夹管理",
+        "image_ops": "图片处理：裁剪、缩放、格式转换、水印、亮度对比度调整",
     }
 
     def register_tool(self, name: str, tool: Any, description: str | None = None) -> None:

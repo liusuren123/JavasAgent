@@ -17,6 +17,7 @@ from src.agents.base_agent import BaseAgent
 from src.platforms import create_platform_adapter
 from src.tools.browser_control import BrowserControl
 from src.tools.code_dev import CodeDev
+from src.tools.image_ops import ImageOps
 from src.tools.office_ops import OfficeOps
 from src.tools.system_control import SystemControl
 from src.utils.config import load_config
@@ -58,6 +59,11 @@ def create_agent() -> BaseAgent:
         office = OfficeOps()
         agent.register_tool("office_ops", office)
         logger.info("办公自动化工具已注册")
+
+    # 注册图片处理工具
+    image_ops = ImageOps()
+    agent.register_tool("image_ops", image_ops)
+    logger.info("图片处理工具已注册")
 
     return agent
 
