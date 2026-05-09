@@ -19,6 +19,7 @@ from src.core.agent_team import AgentTeam
 from src.platforms import create_platform_adapter
 from src.tools.browser_control import BrowserControl
 from src.tools.calendar_ops import CalendarOps
+from src.tools.clipboard_ops import ClipboardOps
 from src.tools.code_dev import CodeDev
 from src.tools.creative_tools import CreativeTools
 from src.tools.email_ops import EmailOps
@@ -48,6 +49,11 @@ def create_agent() -> BaseAgent:
         agent.register_tool("system_control", system_tool)
         agent.register_tool("shell", system_tool)
         logger.info("系统控制工具已注册")
+
+        # 剪贴板归入系统控制大类
+        clipboard = ClipboardOps()
+        agent.register_tool("clipboard", clipboard)
+        logger.info("剪贴板工具已注册")
 
     # 注册代码开发工具
     if config.tools.code_dev.enabled:

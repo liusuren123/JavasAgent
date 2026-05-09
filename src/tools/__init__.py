@@ -3,6 +3,7 @@
 from src.tools.aftereffects_control import AfterEffectsControl
 from src.tools.browser_control import BrowserControl
 from src.tools.calendar_ops import CalendarOps
+from src.tools.clipboard_ops import ClipboardOps
 from src.tools.code_dev import CodeDev
 from src.tools.creative_tools import CreativeTools
 from src.tools.email_ops import EmailOps
@@ -29,4 +30,5 @@ TOOL_REGISTRY: dict[str, type] = {
     "premiere_control": PremiereControl,
     "aftereffects_control": AfterEffectsControl,
     "voice_ops": VoiceOps,
+    "clipboard": ClipboardOps,
 }
