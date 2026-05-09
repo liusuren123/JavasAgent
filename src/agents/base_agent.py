@@ -243,6 +243,7 @@ class BaseAgent:
         """提交并执行任务计划，返回结果回复。"""
         task_id = await self._scheduler.submit(plan)
         self._scheduler.mark_running(plan)
+        self._running = True
 
         try:
             result = await self._executor.execute(plan)
@@ -251,6 +252,7 @@ class BaseAgent:
             result = None
         finally:
             self._scheduler.mark_done(plan, result.success if result else False)
+            self._running = False
 
         if result is None:
             response = f"❌ 执行发生异常，请重试。目标: {plan.intent}"

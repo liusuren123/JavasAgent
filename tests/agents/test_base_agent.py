@@ -644,3 +644,62 @@ class TestPlatformIntegration:
         context_arg = call_args[0][1]  # 第二个位置参数是 context
         assert "屏幕感知" in context_arg
         assert "桌面图标" in context_arg
+
+
+class TestRunningFlag:
+    """测试 _running 标志在执行过程中正确切换。"""
+
+    @pytest.mark.asyncio
+    async def test_running_flag_during_execution(self) -> None:
+        """执行计划时 _running 应为 True，完成后回到 False。"""
+        agent, _, _, _ = _setup_agent_with_mocks(auto_decided=True, exec_success=True)
+
+        assert agent._running is False
+
+        # 保存原始 execute 以便注入中间状态检查
+        original_execute = agent._executor.execute
+
+        running_states: list[bool] = []
+
+        async def _execute_with_check(plan):
+            running_states.append(agent._running)
+            return await original_execute(plan)
+
+        agent._executor.execute = _execute_with_check
+
+        await agent.process("执行任务")
+
+        # execute 内部时 _running 应为 True
+        assert running_states == [True]
+        # 执行完成后 _running 应回到 False
+        assert agent._running is False
+
+    @pytest.mark.asyncio
+    async def test_running_flag_after_failure(self) -> None:
+        """执行失败后 _running 应回到 False。"""
+        agent, _, _, _ = _setup_agent_with_mocks(auto_decided=True, exec_success=False)
+
+        await agent.process("执行任务")
+        assert agent._running is False
+        assert "❌" in agent._memory.get_messages(last_n=1)[0].content
+
+    @pytest.mark.asyncio
+    async def test_running_flag_after_exception(self) -> None:
+        """执行异常后 _running 应回到 False。"""
+        agent, _, _, _ = _setup_agent_with_mocks(auto_decided=True)
+        agent._executor.execute = AsyncMock(side_effect=RuntimeError("崩溃"))
+
+        result = await agent.process("执行任务")
+        assert agent._running is False
+        assert "异常" in result
+
+    @pytest.mark.asyncio
+    async def test_running_flag_reflected_in_status(self) -> None:
+        """_running 应反映在 status 字典中。"""
+        agent, _, _, _ = _setup_agent_with_mocks(auto_decided=True, exec_success=True)
+
+        assert agent.status["running"] is False
+
+        await agent.process("执行任务")
+
+        assert agent.status["running"] is False
