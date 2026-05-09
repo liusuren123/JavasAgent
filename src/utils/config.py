@@ -96,6 +96,7 @@ class ToolsConfig(BaseModel):
     photoshop_control: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
     premiere_control: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
     aftereffects_control: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
+    smart_scheduler: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
 
 
 class AgentConfig(BaseModel):

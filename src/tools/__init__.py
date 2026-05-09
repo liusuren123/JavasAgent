@@ -18,6 +18,7 @@ from src.tools.premiere_control import PremiereControl
 from src.tools.process_manager import ProcessManager
 from src.tools.system_control import SystemControl
 from src.tools.network_ops import NetworkOps
+from src.tools.smart_scheduler import SmartScheduler
 from src.tools.voice_ops import VoiceOps
 
 
@@ -54,6 +55,7 @@ TOOL_REGISTRY: dict[str, type] = {
     "voice_ops": VoiceOps,
     "clipboard": ClipboardOps,
     "network_ops": NetworkOps,
+    "smart_scheduler": SmartScheduler,
 }
 
 # 工具元数据：名称 → _ToolMeta
@@ -106,5 +108,8 @@ TOOL_METADATA: dict[str, _ToolMeta] = {
     ),
     "network_ops": _ToolMeta(
         description="网络操作：HTTP 请求、文件下载、网络检测、API 调用",
+    ),
+    "smart_scheduler": _ToolMeta(
+        description="智能调度：时间安排、日程优化、冲突检测、每日计划生成",
     ),
 }
