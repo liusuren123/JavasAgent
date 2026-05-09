@@ -282,3 +282,71 @@ class TestScheduler:
         status = scheduler.get_status()
         task_info = status["running_tasks"][0]
         assert task_info["progress"] == 1.0
+
+    # --- PriorityQueue 优先级排序测试 ---
+
+    def test_same_priority_plans_no_crash(self) -> None:
+        """相同优先级的多个任务不应因比较失败而报错。
+
+        验证 _PrioritizedPlan 包装通过序列号解决同优先级比较问题。
+        """
+        scheduler = self._make_scheduler()
+        plans = [
+            self._make_plan(f"plan_{i}", priority=Priority.NORMAL)
+            for i in range(5)
+        ]
+
+        async def submit_all():
+            for p in plans:
+                await scheduler.submit(p)
+
+        asyncio.get_event_loop().run_until_complete(submit_all())
+        assert scheduler.queue_size == 5
+
+    def test_priority_ordering(self) -> None:
+        """优先级高的任务应先出队。"""
+        scheduler = self._make_scheduler()
+
+        low = self._make_plan("low", priority=Priority.LOW)
+        high = self._make_plan("high", priority=Priority.HIGH)
+        normal = self._make_plan("normal", priority=Priority.NORMAL)
+
+        async def submit_all():
+            await scheduler.submit(low)
+            await scheduler.submit(high)
+            await scheduler.submit(normal)
+
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(submit_all())
+
+        first = loop.run_until_complete(scheduler.get_next())
+        assert first is not None
+        assert first.id == "high"  # HIGH 优先出队
+
+        second = loop.run_until_complete(scheduler.get_next())
+        assert second is not None
+        assert second.id == "normal"  # NORMAL 第二
+
+        third = loop.run_until_complete(scheduler.get_next())
+        assert third is not None
+        assert third.id == "low"  # LOW 最后
+
+    def test_fifo_for_same_priority(self) -> None:
+        """同优先级任务应按 FIFO 顺序出队。"""
+        scheduler = self._make_scheduler()
+        plans = [
+            self._make_plan(f"plan_{i}", priority=Priority.NORMAL)
+            for i in range(3)
+        ]
+
+        async def submit_all():
+            for p in plans:
+                await scheduler.submit(p)
+
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(submit_all())
+
+        for expected_id in ["plan_0", "plan_1", "plan_2"]:
+            plan = loop.run_until_complete(scheduler.get_next())
+            assert plan is not None
+            assert plan.id == expected_id

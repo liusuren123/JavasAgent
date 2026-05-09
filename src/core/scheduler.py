@@ -1,12 +1,15 @@
 """任务调度器。
 
 管理任务队列，支持优先级和并发控制。
+使用可比较的包装对象避免 PriorityQueue 在优先级相同时的比较问题。
 """
 
 from __future__ import annotations
 
 import asyncio
+import itertools
 from collections import defaultdict
+from dataclasses import dataclass, field
 from typing import Any
 
 from loguru import logger
@@ -14,15 +17,29 @@ from loguru import logger
 from src.core.models import PlanStatus, TaskPlan
 
 
+@dataclass(order=True)
+class _PrioritizedPlan:
+    """用于 PriorityQueue 的可比较包装。
+
+    通过唯一序列号保证同优先级的 TaskPlan 不会直接比较
+    （避免 dataclass 字段比较失败）。
+    """
+
+    priority_value: int = field(compare=True)
+    sequence: int = field(compare=True)
+    plan: TaskPlan = field(compare=False)
+
+
 class Scheduler:
     """任务调度器。"""
 
     def __init__(self, max_concurrent: int = 1) -> None:
         self._max_concurrent = max_concurrent
-        self._queue: asyncio.PriorityQueue[TaskPlan] = asyncio.PriorityQueue()
+        self._queue: asyncio.PriorityQueue[_PrioritizedPlan] = asyncio.PriorityQueue()
         self._running: dict[str, TaskPlan] = {}
         self._completed: dict[str, TaskPlan] = {}
         self._history: list[dict[str, Any]] = []
+        self._counter = itertools.count()
 
     @property
     def has_running_task(self) -> bool:
@@ -49,7 +66,12 @@ class Scheduler:
             任务 ID
         """
         plan.status = PlanStatus.PENDING
-        await self._queue.put(plan)
+        wrapped = _PrioritizedPlan(
+            priority_value=-plan.priority.value,  # 取负以实现优先级越大越优先
+            sequence=next(self._counter),
+            plan=plan,
+        )
+        await self._queue.put(wrapped)
         self._history.append({
             "plan_id": plan.id,
             "intent": plan.intent,
@@ -95,8 +117,8 @@ class Scheduler:
             return None
 
         try:
-            plan = self._queue.get_nowait()
-            return plan
+            wrapped = self._queue.get_nowait()
+            return wrapped.plan
         except asyncio.QueueEmpty:
             return None
 

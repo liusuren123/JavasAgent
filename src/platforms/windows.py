@@ -1,6 +1,7 @@
 """Windows 平台适配器。
 
 使用 pyautogui + Win32 API 实现 Windows 桌面操控。
+支持中文输入（通过剪贴板粘贴方式）。
 """
 
 from __future__ import annotations
@@ -12,6 +13,66 @@ import pyautogui
 from loguru import logger
 
 from src.platforms.base import PlatformAdapter
+
+
+def _paste_via_clipboard(text: str) -> None:
+    """通过剪贴板粘贴文本，支持中文和特殊字符。
+
+    使用 Win32 API 直接操作剪贴板，绕过 pyautogui.typewrite
+    仅支持 ASCII 字符的限制。
+
+    Args:
+        text: 要输入的文本
+    """
+    import ctypes
+    import time
+
+    CF_UNICODETEXT = 13
+
+    kernel32 = ctypes.windll.kernel32
+    user32 = ctypes.windll.user32
+
+    # 打开剪贴板并设置内容
+    if not user32.OpenClipboard(0):
+        logger.error("无法打开剪贴板")
+        return
+
+    try:
+        user32.EmptyClipboard()
+
+        # 分配全局内存
+        text_bytes = text.encode("utf-16-le") + b"\x00\x00"
+        h_mem = kernel32.GlobalAlloc(0x0002, len(text_bytes))  # GMEM_MOVEABLE
+        if not h_mem:
+            logger.error("无法分配剪贴板内存")
+            return
+
+        p_mem = kernel32.GlobalLock(h_mem)
+        if not p_mem:
+            kernel32.GlobalFree(h_mem)
+            logger.error("无法锁定剪贴板内存")
+            return
+
+        ctypes.cdll.msvcrt.memcpy(p_mem, text_bytes, len(text_bytes))
+        kernel32.GlobalUnlock(h_mem)
+
+        if not user32.SetClipboardData(CF_UNICODETEXT, h_mem):
+            kernel32.GlobalFree(h_mem)
+            logger.error("无法设置剪贴板数据")
+            return
+    finally:
+        user32.CloseClipboard()
+
+    # 短暂延迟确保剪贴板就绪
+    time.sleep(0.05)
+
+    # 发送 Ctrl+V 粘贴
+    pyautogui.hotkey("ctrl", "v")
+
+
+def _has_non_ascii(text: str) -> bool:
+    """检查文本是否包含非 ASCII 字符。"""
+    return any(ord(c) > 127 for c in text)
 
 
 class WindowsAdapter(PlatformAdapter):
@@ -36,9 +97,22 @@ class WindowsAdapter(PlatformAdapter):
         logger.debug(f"点击: ({x}, {y}), 按钮: {button}, 次数: {clicks}")
 
     async def type_text(self, text: str, interval: float = 0.02) -> None:
-        """输入文字。"""
-        pyautogui.typewrite(text, interval=interval)
-        logger.debug(f"输入文字: {text[:20]}...")
+        """输入文字。
+
+        自动检测文本内容：
+        - 纯 ASCII 文本：使用 pyautogui.typewrite（逐字输入）
+        - 包含中文/特殊字符：使用剪贴板粘贴（一次性输入）
+
+        Args:
+            text: 要输入的文本
+            interval: 逐字输入时的字符间隔（仅对 ASCII 文本有效）
+        """
+        if _has_non_ascii(text):
+            _paste_via_clipboard(text)
+            logger.debug(f"粘贴输入文本: {text[:20]}...")
+        else:
+            pyautogui.typewrite(text, interval=interval)
+            logger.debug(f"键盘输入文本: {text[:20]}...")
 
     async def press_key(self, key: str) -> None:
         """按下按键。"""
@@ -105,3 +179,61 @@ class WindowsAdapter(PlatformAdapter):
         except Exception as e:
             logger.error(f"激活窗口失败: {e}")
             return False
+
+    async def scroll(self, clicks: int = 3, direction: str = "down") -> None:
+        """滚动鼠标滚轮。
+
+        Args:
+            clicks: 滚动次数
+            direction: 滚动方向 ("up" 或 "down")
+        """
+        pyautogui.scroll(clicks if direction == "up" else -clicks)
+        logger.debug(f"滚动: {direction} {clicks} 次")
+
+    async def move_to(self, x: int, y: int, duration: float = 0.3) -> None:
+        """移动鼠标到指定坐标。
+
+        Args:
+            x: 目标 X 坐标
+            y: 目标 Y 坐标
+            duration: 移动持续时间（秒）
+        """
+        pyautogui.moveTo(x, y, duration=duration)
+        logger.debug(f"移动鼠标到: ({x}, {y})")
+
+    async def drag_to(
+        self,
+        start_x: int,
+        start_y: int,
+        end_x: int,
+        end_y: int,
+        duration: float = 0.5,
+        button: str = "left",
+    ) -> None:
+        """从起点拖拽到终点。
+
+        Args:
+            start_x: 起点 X
+            start_y: 起点 Y
+            end_x: 终点 X
+            end_y: 终点 Y
+            duration: 拖拽持续时间
+            button: 鼠标按钮
+        """
+        pyautogui.moveTo(start_x, start_y)
+        pyautogui.drag(
+            end_x - start_x,
+            end_y - start_y,
+            duration=duration,
+            button=button,
+        )
+        logger.debug(f"拖拽: ({start_x},{start_y}) -> ({end_x},{end_y})")
+
+    async def get_screen_size(self) -> dict[str, int]:
+        """获取屏幕分辨率。
+
+        Returns:
+            包含 width 和 height 的字典
+        """
+        size = pyautogui.size()
+        return {"width": size.width, "height": size.height}

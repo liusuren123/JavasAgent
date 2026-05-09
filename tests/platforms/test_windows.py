@@ -87,13 +87,62 @@ class TestWindowsAdapter:
             mock_pag.click.assert_called_once_with(x=100, y=200, button="left", clicks=2)
 
     @pytest.mark.asyncio
-    async def test_type_text(self) -> None:
+    async def test_type_text_ascii(self) -> None:
+        """纯 ASCII 文本应使用 pyautogui.typewrite。"""
         with patch("src.platforms.windows.pyautogui") as mock_pag:
             from src.platforms.windows import WindowsAdapter
             adapter = WindowsAdapter()
 
             await adapter.type_text("hello world", interval=0.01)
             mock_pag.typewrite.assert_called_once_with("hello world", interval=0.01)
+
+    @pytest.mark.asyncio
+    async def test_type_text_chinese_uses_clipboard(self) -> None:
+        """中文文本应使用剪贴板粘贴方式（不调用 typewrite）。"""
+        with patch("src.platforms.windows.pyautogui") as mock_pag, \
+             patch("src.platforms.windows._paste_via_clipboard") as mock_paste:
+            from src.platforms.windows import WindowsAdapter
+            adapter = WindowsAdapter()
+
+            await adapter.type_text("你好世界")
+            mock_paste.assert_called_once_with("你好世界")
+            mock_pag.typewrite.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_type_text_mixed_uses_clipboard(self) -> None:
+        """中英混合文本应使用剪贴板粘贴方式。"""
+        with patch("src.platforms.windows.pyautogui") as mock_pag, \
+             patch("src.platforms.windows._paste_via_clipboard") as mock_paste:
+            from src.platforms.windows import WindowsAdapter
+            adapter = WindowsAdapter()
+
+            await adapter.type_text("Hello你好")
+            mock_paste.assert_called_once_with("Hello你好")
+            mock_pag.typewrite.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_type_text_special_chars_uses_clipboard(self) -> None:
+        """特殊 Unicode 字符应使用剪贴板粘贴方式。"""
+        with patch("src.platforms.windows.pyautogui") as mock_pag, \
+             patch("src.platforms.windows._paste_via_clipboard") as mock_paste:
+            from src.platforms.windows import WindowsAdapter
+            adapter = WindowsAdapter()
+
+            await adapter.type_text("€¥£")
+            mock_paste.assert_called_once_with("€¥£")
+            mock_pag.typewrite.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_has_non_ascii(self) -> None:
+        """测试 _has_non_ascii 辅助函数。"""
+        from src.platforms.windows import _has_non_ascii
+
+        assert _has_non_ascii("你好") is True
+        assert _has_non_ascii("hello") is False
+        assert _has_non_ascii("Hello世界") is True
+        assert _has_non_ascii("€") is True
+        assert _has_non_ascii("") is False
+        assert _has_non_ascii("abc123") is False
 
     @pytest.mark.asyncio
     async def test_press_key(self) -> None:
@@ -143,3 +192,50 @@ class TestWindowsAdapter:
             with patch.dict("sys.modules", {"win32gui": None}):
                 result = await adapter.activate_window("12345")
                 assert result is False
+
+    @pytest.mark.asyncio
+    async def test_scroll_down(self) -> None:
+        with patch("src.platforms.windows.pyautogui") as mock_pag:
+            from src.platforms.windows import WindowsAdapter
+            adapter = WindowsAdapter()
+
+            await adapter.scroll(clicks=3, direction="down")
+            mock_pag.scroll.assert_called_once_with(-3)
+
+    @pytest.mark.asyncio
+    async def test_scroll_up(self) -> None:
+        with patch("src.platforms.windows.pyautogui") as mock_pag:
+            from src.platforms.windows import WindowsAdapter
+            adapter = WindowsAdapter()
+
+            await adapter.scroll(clicks=5, direction="up")
+            mock_pag.scroll.assert_called_once_with(5)
+
+    @pytest.mark.asyncio
+    async def test_move_to(self) -> None:
+        with patch("src.platforms.windows.pyautogui") as mock_pag:
+            from src.platforms.windows import WindowsAdapter
+            adapter = WindowsAdapter()
+
+            await adapter.move_to(500, 300, duration=0.2)
+            mock_pag.moveTo.assert_called_once_with(500, 300, duration=0.2)
+
+    @pytest.mark.asyncio
+    async def test_drag_to(self) -> None:
+        with patch("src.platforms.windows.pyautogui") as mock_pag:
+            from src.platforms.windows import WindowsAdapter
+            adapter = WindowsAdapter()
+
+            await adapter.drag_to(100, 200, 300, 400, duration=0.5, button="left")
+            mock_pag.moveTo.assert_called_once_with(100, 200)
+            mock_pag.drag.assert_called_once_with(200, 200, duration=0.5, button="left")
+
+    @pytest.mark.asyncio
+    async def test_get_screen_size(self) -> None:
+        with patch("src.platforms.windows.pyautogui") as mock_pag:
+            mock_pag.size.return_value = MagicMock(width=1920, height=1080)
+            from src.platforms.windows import WindowsAdapter
+            adapter = WindowsAdapter()
+
+            result = await adapter.get_screen_size()
+            assert result == {"width": 1920, "height": 1080}

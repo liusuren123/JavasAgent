@@ -51,3 +51,27 @@ class PlatformAdapter(ABC):
     async def activate_window(self, window_id: str) -> bool:
         """激活指定窗口。"""
         ...
+
+    async def scroll(self, clicks: int = 3, direction: str = "down") -> None:
+        """滚动鼠标滚轮。"""
+        raise NotImplementedError
+
+    async def move_to(self, x: int, y: int, duration: float = 0.3) -> None:
+        """移动鼠标到指定坐标。"""
+        raise NotImplementedError
+
+    async def drag_to(
+        self,
+        start_x: int,
+        start_y: int,
+        end_x: int,
+        end_y: int,
+        duration: float = 0.5,
+        button: str = "left",
+    ) -> None:
+        """从起点拖拽到终点。"""
+        raise NotImplementedError
+
+    async def get_screen_size(self) -> dict[str, int]:
+        """获取屏幕分辨率。"""
+        raise NotImplementedError
