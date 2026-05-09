@@ -30,6 +30,7 @@ class PendingAction(str, Enum):
     CONFIRM = "confirm"       # 用户确认执行之前被暂停的计划
     CANCEL = "cancel"         # 用户取消执行
     REPLAN = "replan"         # 用户要求重新规划
+    RETRY = "retry"           # 用户要求重试失败的任务
     NONE = "none"             # 无待处理动作
 
 
@@ -175,49 +176,67 @@ class BaseAgent:
     async def _handle_pending_feedback(self, user_input: str) -> str | None:
         """处理用户对上次待确认决策的反馈。
 
+        同时处理对失败任务的重试请求。
+
         Args:
             user_input: 用户输入
 
         Returns:
             回复字符串（如果匹配反馈模式），否则返回 None 表示走正常流程
         """
-        pending = self._pending
-        self._pending = None  # 清除待处理状态
-
         action = self._classify_feedback(user_input)
 
-        if action == PendingAction.CONFIRM:
-            logger.info("用户确认执行计划")
-            return await self._execute_plan(pending.plan)
+        # 优先处理失败任务的重试
+        if action == PendingAction.RETRY and self._last_failed_plan is not None:
+            failed = self._last_failed_plan
+            self._last_failed_plan = None
+            logger.info(f"用户要求重试失败任务: {failed.intent}")
+            # 重置所有步骤状态，以便重新执行
+            for step in failed.steps:
+                step.status = step.status.__class__.PENDING
+                step.retry_count = 0
+                step.result = None
+                step.error = None
+            failed.status = failed.status.__class__.PENDING
+            return await self._execute_plan(failed)
 
-        if action == PendingAction.CANCEL:
-            response = "🚫 已取消任务。"
-            self._memory.add("assistant", response)
-            return response
+        if self._pending is not None:
+            pending = self._pending
+            self._pending = None  # 清除待处理状态
 
-        if action == PendingAction.REPLAN:
-            logger.info("用户要求重新规划")
-            reason = f"用户反馈：{user_input}"
-            try:
-                new_plan = await self._planner.replan(pending.plan, reason)
-                response = (
-                    f"📋 已重新规划（{len(new_plan.steps)} 步）：{new_plan.intent}\n"
-                    f"回复「确认」执行新计划。"
-                )
-                self._pending = PendingDecision(
-                    plan=new_plan,
-                    question=new_plan.intent,
-                    confidence=pending.confidence,
-                    screen_context=pending.screen_context,
-                )
-            except Exception as e:
-                logger.error(f"重新规划失败: {e}")
-                response = f"❌ 重新规划失败: {e}"
-            self._memory.add("assistant", response)
-            return response
+            if action == PendingAction.CONFIRM:
+                logger.info("用户确认执行计划")
+                return await self._execute_plan(pending.plan)
 
-        # 未匹配任何反馈模式，说明用户开始了新对话
-        # 恢复 pending 状态... 其实不需要，用户已经转向了
+            if action == PendingAction.CANCEL:
+                response = "🚫 已取消任务。"
+                self._memory.add("assistant", response)
+                return response
+
+            if action == PendingAction.REPLAN:
+                logger.info("用户要求重新规划")
+                reason = f"用户反馈：{user_input}"
+                try:
+                    new_plan = await self._planner.replan(pending.plan, reason)
+                    response = (
+                        f"📋 已重新规划（{len(new_plan.steps)} 步）：{new_plan.intent}\n"
+                        f"回复「确认」执行新计划。"
+                    )
+                    self._pending = PendingDecision(
+                        plan=new_plan,
+                        question=new_plan.intent,
+                        confidence=pending.confidence,
+                        screen_context=pending.screen_context,
+                    )
+                except Exception as e:
+                    logger.error(f"重新规划失败: {e}")
+                    response = f"❌ 重新规划失败: {e}"
+                self._memory.add("assistant", response)
+                return response
+
+            # 未匹配任何反馈模式，说明用户开始了新对话
+            return None
+
         return None
 
     async def _execute_plan(self, plan: TaskPlan) -> str:
@@ -270,8 +289,13 @@ class BaseAgent:
         if text in self._CANCEL_KEYWORDS:
             return PendingAction.CANCEL
 
+        # 重试关键词（优先于 replan，因为"重试"是更明确的意图）
+        retry_keywords = {"重试", "retry", "again", "redo"}
+        if any(kw in text for kw in retry_keywords):
+            return PendingAction.RETRY
+
         # 包含重试/重新规划意图的关键词
-        replan_keywords = {"重试", "重新", "换", "调整", "retry", "replan", "redo", "change", "adjust"}
+        replan_keywords = {"重新", "换", "调整", "replan", "change", "adjust"}
         if any(kw in text for kw in replan_keywords):
             return PendingAction.REPLAN
 
