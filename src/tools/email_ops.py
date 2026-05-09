@@ -13,7 +13,7 @@ from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -26,6 +26,9 @@ from src.tools.email_imap import (
 )
 from src.tools.email_send import smtp_send
 from src.utils.path_safety import PathSafetyError, safe_resolve_path
+
+if TYPE_CHECKING:
+    from src.tools.email_attachments import EmailAttachmentManager
 
 
 class EmailConfig:
@@ -78,6 +81,15 @@ class EmailOps:
     def __init__(self, workspace: str | None = None, config: dict[str, Any] | None = None) -> None:
         self._workspace = Path(workspace) if workspace else Path.cwd()
         self._config = EmailConfig(config)
+        self._attachment_manager: EmailAttachmentManager | None = None
+
+    @property
+    def attachments(self) -> EmailAttachmentManager:
+        """懒加载附件管理器。"""
+        if self._attachment_manager is None:
+            from src.tools.email_attachments import EmailAttachmentManager
+            self._attachment_manager = EmailAttachmentManager(self._config)
+        return self._attachment_manager
 
     async def execute(self, action: str, params: dict[str, Any]) -> Any:
         """执行邮件操作。
