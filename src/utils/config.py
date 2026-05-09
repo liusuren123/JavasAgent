@@ -82,8 +82,13 @@ class ToolsConfig(BaseModel):
     system_control: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
     code_dev: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
     office_ops: ToolConfig = Field(default_factory=ToolConfig)
-    creative_tools: ToolConfig = Field(default_factory=ToolConfig)
+    creative_tools: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
     browser_control: ToolConfig = Field(default_factory=ToolConfig)
+    email_ops: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
+    calendar_ops: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
+    voice_ops: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
+    image_ops: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
+    process_manager: ToolConfig = Field(default_factory=lambda: ToolConfig(enabled=True))
 
 
 class AgentConfig(BaseModel):

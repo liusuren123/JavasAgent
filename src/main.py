@@ -16,10 +16,15 @@ from rich.prompt import Prompt
 from src.agents.base_agent import BaseAgent
 from src.platforms import create_platform_adapter
 from src.tools.browser_control import BrowserControl
+from src.tools.calendar_ops import CalendarOps
 from src.tools.code_dev import CodeDev
+from src.tools.creative_tools import CreativeTools
+from src.tools.email_ops import EmailOps
 from src.tools.image_ops import ImageOps
 from src.tools.office_ops import OfficeOps
+from src.tools.process_manager import ProcessManager
 from src.tools.system_control import SystemControl
+from src.tools.voice_ops import VoiceOps
 from src.utils.config import load_config
 from src.utils.logger import get_logger, setup_logger
 
@@ -61,9 +66,40 @@ def create_agent() -> BaseAgent:
         logger.info("办公自动化工具已注册")
 
     # 注册图片处理工具
-    image_ops = ImageOps()
-    agent.register_tool("image_ops", image_ops)
-    logger.info("图片处理工具已注册")
+    if config.tools.image_ops.enabled:
+        image_ops = ImageOps()
+        agent.register_tool("image_ops", image_ops)
+        logger.info("图片处理工具已注册")
+
+    # 注册邮件工具
+    if config.tools.email_ops.enabled:
+        email_ops = EmailOps()
+        agent.register_tool("email_ops", email_ops)
+        logger.info("邮件工具已注册")
+
+    # 注册日历工具
+    if config.tools.calendar_ops.enabled:
+        calendar_ops = CalendarOps()
+        agent.register_tool("calendar_ops", calendar_ops)
+        logger.info("日历工具已注册")
+
+    # 注册语音工具
+    if config.tools.voice_ops.enabled:
+        voice_ops = VoiceOps()
+        agent.register_tool("voice_ops", voice_ops)
+        logger.info("语音工具已注册")
+
+    # 注册创意工具
+    if config.tools.creative_tools.enabled:
+        creative_tools = CreativeTools()
+        agent.register_tool("creative_tools", creative_tools)
+        logger.info("创意工具已注册")
+
+    # 注册进程管理工具
+    if config.tools.process_manager.enabled:
+        process_manager = ProcessManager()
+        agent.register_tool("process_manager", process_manager)
+        logger.info("进程管理工具已注册")
 
     return agent
 
