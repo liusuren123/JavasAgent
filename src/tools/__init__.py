@@ -5,6 +5,13 @@
 """
 
 from src.tools.aftereffects_control import AfterEffectsControl
+from src.tools.archive_ops import (
+    compress_files,
+    decompress_archive,
+    extract_single,
+    get_archive_info,
+    list_archive,
+)
 from src.tools.browser_control import BrowserControl
 from src.tools.calendar_ops import CalendarOps
 from src.tools.clipboard_ops import ClipboardOps
