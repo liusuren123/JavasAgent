@@ -121,9 +121,9 @@ class Executor:
             return None
 
     def _has_failed_dependency(self, step: Step, plan: TaskPlan) -> bool:
-        """检查步骤的前置依赖是否有失败的。"""
+        """检查步骤的前置依赖是否有失败的（O(1) 索引查找）。"""
         for dep_id in step.depends_on:
-            for s in plan.steps:
-                if s.id == dep_id and s.status == StepStatus.FAILED:
-                    return True
+            dep = plan._get_step(dep_id)
+            if dep is not None and dep.status == StepStatus.FAILED:
+                return True
         return False

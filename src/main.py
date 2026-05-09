@@ -142,5 +142,101 @@ def status() -> None:
     )
 
 
+@cli.command()
+@click.option("--limit", "-n", default=10, help="显示最近 N 条历史记录")
+def history(limit: int) -> None:
+    """查看任务执行历史。"""
+    agent = create_agent()
+    from rich.table import Table
+
+    table = Table(title="📋 任务执行历史", show_lines=True)
+    table.add_column("序号", style="dim", width=4)
+    table.add_column("任务 ID", style="cyan")
+    table.add_column("意图", max_width=40)
+    table.add_column("状态", width=8)
+    table.add_column("提交时间", width=20)
+
+    scheduler_status = agent.status["scheduler"]
+    records = scheduler_status.get("history", [])
+    if not records:
+        console.print("[dim]暂无任务历史记录[/dim]")
+        return
+
+    for i, record in enumerate(records[-limit:], 1):
+        status_str = {
+            "queued": "⏳ 排队",
+            "running": "🔄 运行",
+            "done": "✅ 完成",
+            "failed": "❌ 失败",
+        }.get(record.get("status", ""), record.get("status", ""))
+        table.add_row(
+            str(i),
+            record.get("plan_id", ""),
+            record.get("intent", "")[:40],
+            status_str,
+            record.get("submitted_at", ""),
+        )
+
+    console.print(table)
+
+
+@cli.command()
+@click.argument("query")
+@click.option("--top-k", "-k", default=5, help="返回结果数")
+def memory(query: str, top_k: int) -> None:
+    """从长期记忆中检索信息。"""
+    agent = create_agent()
+
+    async def _search() -> str | list:
+        async with agent:
+            await agent.initialize_memory()
+            results = await agent.recall(query, top_k=top_k)
+            return results
+
+    results = asyncio.run(_search())
+
+    if not results:
+        console.print(f"[dim]未找到与「{query}」相关的记忆[/dim]")
+        return
+
+    from rich.table import Table
+
+    table = Table(title=f"🧠 记忆检索: {query}")
+    table.add_column("ID", style="dim", width=15)
+    table.add_column("分类", style="cyan", width=12)
+    table.add_column("内容", max_width=60)
+    table.add_column("相关度", width=8)
+
+    for entry in results:
+        table.add_row(
+            entry.id[:15],
+            entry.category,
+            entry.content[:60],
+            f"{entry.relevance_score:.2f}",
+        )
+
+    console.print(table)
+
+
+@cli.command()
+@click.argument("content")
+@click.option("--category", "-c", default="experience", help="记忆分类 (experience/knowledge/preference/skill)")
+def remember(content: str, category: str) -> None:
+    """将信息存入长期记忆。"""
+    agent = create_agent()
+
+    async def _store() -> str | None:
+        async with agent:
+            await agent.initialize_memory()
+            return await agent.remember(content, category=category)
+
+    entry_id = asyncio.run(_store())
+
+    if entry_id:
+        console.print(f"✅ 已记忆: {entry_id} [{category}]")
+    else:
+        console.print("[red]记忆存储失败[/red]")
+
+
 if __name__ == "__main__":
     cli()

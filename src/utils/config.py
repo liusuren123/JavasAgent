@@ -42,6 +42,11 @@ class LLMConfig(BaseModel):
                 api_key_env="ZHIPUAI_API_KEY",
                 base_url="https://open.bigmodel.cn/api/paas/v4",
             ),
+            "openai": LLMProviderConfig(
+                model="gpt-4o",
+                api_key_env="OPENAI_API_KEY",
+                base_url="https://api.openai.com/v1",
+            ),
         }
     )
     temperature: float = 0.7

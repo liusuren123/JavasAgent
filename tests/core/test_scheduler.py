@@ -350,3 +350,47 @@ class TestScheduler:
             plan = loop.run_until_complete(scheduler.get_next())
             assert plan is not None
             assert plan.id == expected_id
+
+    # --- get_status 包含 history 字段测试 ---
+
+    def test_get_status_includes_history(self) -> None:
+        """get_status 应包含 history 列表。"""
+        scheduler = self._make_scheduler()
+        status = scheduler.get_status()
+        assert "history" in status
+        assert isinstance(status["history"], list)
+
+    def test_history_updates_on_running(self) -> None:
+        """mark_running 应更新历史状态为 running。"""
+        scheduler = self._make_scheduler()
+        plan = self._make_plan()
+
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(scheduler.submit(plan))
+        scheduler.mark_running(plan)
+
+        assert scheduler._history[0]["status"] == "running"
+
+    def test_history_updates_on_done(self) -> None:
+        """mark_done 应更新历史状态为 done/failed。"""
+        scheduler = self._make_scheduler()
+        plan = self._make_plan()
+
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(scheduler.submit(plan))
+        scheduler.mark_running(plan)
+        scheduler.mark_done(plan, success=True)
+
+        assert scheduler._history[0]["status"] == "done"
+
+    def test_history_updates_on_failure(self) -> None:
+        """mark_done(success=False) 应更新历史状态为 failed。"""
+        scheduler = self._make_scheduler()
+        plan = self._make_plan()
+
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(scheduler.submit(plan))
+        scheduler.mark_running(plan)
+        scheduler.mark_done(plan, success=False)
+
+        assert scheduler._history[0]["status"] == "failed"

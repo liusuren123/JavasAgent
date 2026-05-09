@@ -102,6 +102,13 @@ class Scheduler:
         """标记任务为运行中。"""
         plan.status = PlanStatus.RUNNING
         self._running[plan.id] = plan
+
+        # 更新历史记录中对应条目的状态
+        for record in self._history:
+            if record.get("plan_id") == plan.id:
+                record["status"] = "running"
+                break
+
         logger.debug(f"任务标记为运行中: {plan.id}")
 
     def mark_done(self, plan: TaskPlan, success: bool) -> None:
@@ -109,6 +116,13 @@ class Scheduler:
         plan.status = PlanStatus.DONE if success else PlanStatus.FAILED
         self._running.pop(plan.id, None)
         self._completed[plan.id] = plan
+
+        # 更新历史记录中对应条目的状态
+        for record in self._history:
+            if record.get("plan_id") == plan.id:
+                record["status"] = "done" if success else "failed"
+                break
+
         logger.info(f"任务完成: {plan.id} (成功: {success})")
 
     async def get_next(self) -> TaskPlan | None:
@@ -133,4 +147,5 @@ class Scheduler:
                 {"id": p.id, "intent": p.intent[:50], "progress": p.progress}
                 for p in self._running.values()
             ],
+            "history": self._history,
         }
