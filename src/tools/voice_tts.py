@@ -1,7 +1,8 @@
 """TTS 语音合成工具。
 
-使用 Windows SAPI (COM 接口) 进行本地语音合成，无需外部 API。
-在非 Windows 平台上提供 graceful 降级（返回 unsupported 错误）。
+支持多后端引擎：
+  - edge-tts（优先）：微软 Edge 在线 TTS，免费高质量
+  - pyttsx3（离线 fallback）：本地 SAPI / NSSAPI / espeak
 
 Usage::
 
@@ -14,65 +15,109 @@ Usage::
 from __future__ import annotations
 
 import asyncio
-import platform
+import io
+import os
 import threading
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
+from src.utils.path_safety import safe_resolve_path
+
 # ---------------------------------------------------------------------------
-# 平台检测：仅 Windows 支持SAPI COM
+# 引擎可用性检测
 # ---------------------------------------------------------------------------
-_IS_WINDOWS = platform.system() == "Windows"
+_EDGE_TTS_AVAILABLE: bool = False
+_PYTTSX3_AVAILABLE: bool = False
 
-if _IS_WINDOWS:
-    try:
-        import win32com.client  # type: ignore[import-untyped]
-        import pythoncom  # type: ignore[import-untyped]
+try:
+    import edge_tts  # type: ignore[import-untyped]
 
-        _SAPI_AVAILABLE = True
-    except ImportError:
-        _SAPI_AVAILABLE = False
-        logger.warning("win32com 未安装，TTS 功能不可用。请安装 pywin32。")
-else:
-    _SAPI_AVAILABLE = False
+    _EDGE_TTS_AVAILABLE = True
+except ImportError:
+    pass
+
+try:
+    import pyttsx3  # type: ignore[import-untyped]
+
+    _PYTTSX3_AVAILABLE = True
+except ImportError:
+    pass
+
+if not _EDGE_TTS_AVAILABLE and not _PYTTSX3_AVAILABLE:
+    logger.warning("edge-tts 和 pyttsx3 均未安装，TTS 功能不可用。")
+
+# 默认工作空间
+_WORKSPACE = Path(os.environ.get("JAVASAGENT_WORKSPACE", ".")).resolve()
 
 
-def _unsupported() -> dict[str, Any]:
-    """返回平台不支持的结果。"""
-    return {
-        "error": "TTS 仅支持 Windows 平台（SAPI COM 接口）",
-        "platform": platform.system(),
-    }
+def _pick_engine(engine: str) -> str:
+    """选择实际使用的引擎。
+
+    Args:
+        engine: 用户请求的引擎名（"default" / "edge-tts" / "pyttsx3"）
+
+    Returns:
+        实际使用的引擎名
+    """
+    if engine == "default":
+        if _EDGE_TTS_AVAILABLE:
+            return "edge-tts"
+        if _PYTTSX3_AVAILABLE:
+            return "pyttsx3"
+        return "none"
+    if engine == "edge-tts" and _EDGE_TTS_AVAILABLE:
+        return "edge-tts"
+    if engine == "pyttsx3" and _PYTTSX3_AVAILABLE:
+        return "pyttsx3"
+    # 用户指定了不可用的引擎，尝试 fallback
+    if _EDGE_TTS_AVAILABLE:
+        logger.info(f"引擎 {engine} 不可用，回退到 edge-tts")
+        return "edge-tts"
+    if _PYTTSX3_AVAILABLE:
+        logger.info(f"引擎 {engine} 不可用，回退到 pyttsx3")
+        return "pyttsx3"
+    return "none"
+
+
+# ---------------------------------------------------------------------------
+# VoiceTTS
+# ---------------------------------------------------------------------------
 
 
 class VoiceTTS:
-    """TTS 语音合成工具（Windows SAPI）。
+    """TTS 语音合成工具。
 
-    使用 Windows SAPI SpVoice COM 对象实现文本朗读、语音引擎列表、
-    保存到 WAV 文件等功能。speak 方法异步执行，不阻塞主循环。
+    优先使用 edge-tts（微软 Edge 在线 TTS），不可用时回退到 pyttsx3（离线）。
+    所有同步操作通过 asyncio.to_thread / run_in_executor 执行，不阻塞事件循环。
 
     Attributes:
-        _voice: SAPI SpVoice COM 对象（仅 Windows 可用）
+        _pyttsx3_engine: pyttsx3 引擎实例（惰性初始化）
         _speaking: 当前是否正在朗读
         _speak_thread: 当前朗读线程
     """
 
     def __init__(self) -> None:
-        """初始化 TTS 引擎。"""
-        self._voice: Any = None
+        """初始化 TTS。"""
+        self._pyttsx3_engine: Any = None
         self._speaking: bool = False
         self._speak_thread: threading.Thread | None = None
         self._stop_flag: threading.Event = threading.Event()
 
-        if _SAPI_AVAILABLE:
+    # ------------------------------------------------------------------
+    # 惰性初始化 pyttsx3
+    # ------------------------------------------------------------------
+
+    def _ensure_pyttsx3(self) -> Any:
+        """惰性创建 pyttsx3 引擎。"""
+        if self._pyttsx3_engine is None and _PYTTSX3_AVAILABLE:
             try:
-                self._voice = win32com.client.Dispatch("SAPI.SpVoice")
-                logger.debug("SAPI SpVoice 初始化成功")
+                self._pyttsx3_engine = pyttsx3.init()
+                logger.debug("pyttsx3 引擎初始化成功")
             except Exception as e:
-                logger.error(f"SAPI SpVoice 初始化失败: {e}")
-                self._voice = None
+                logger.error(f"pyttsx3 初始化失败: {e}")
+        return self._pyttsx3_engine
 
     # ------------------------------------------------------------------
     # 公共方法
@@ -81,293 +126,320 @@ class VoiceTTS:
     async def speak(
         self,
         text: str,
-        voice_name: str | None = None,
-        rate: int = 0,
-        volume: int = 100,
+        engine: str = "default",
+        rate: int = 200,
+        volume: float = 1.0,
     ) -> dict[str, Any]:
         """朗读文本（异步，不阻塞调用者）。
 
         Args:
             text: 要朗读的文本内容
-            voice_name: 语音引擎名称（可选，默认使用系统默认语音）
-            rate: 语速，范围 -10 到 10，默认 0（正常语速）
-            volume: 音量，范围 0 到 100，默认 100
+            engine: TTS 引擎（"default" / "edge-tts" / "pyttsx3"）
+            rate: 语速（edge-tts: 拼接在 voice rate 中；pyttsx3: words per minute）
+            volume: 音量 0.0~1.0
 
         Returns:
-            操作结果字典::
-
-                {
-                    "status": "speaking",
-                    "text": "朗读的文本",
-                    "voice": "语音名称",
-                    "rate": 0,
-                    "volume": 100
-                }
+            操作结果字典，包含 status / message / engine 等字段
         """
-        if not _SAPI_AVAILABLE or self._voice is None:
-            return _unsupported()
-
         if not text or not text.strip():
             return {"error": "文本内容不能为空"}
 
-        # 校验参数范围
-        rate = max(-10, min(10, rate))
-        volume = max(0, min(100, volume))
+        chosen = _pick_engine(engine)
+        if chosen == "none":
+            return {
+                "error": "没有可用的 TTS 引擎。请安装 edge-tts 或 pyttsx3。",
+            }
 
-        # 如果正在朗读，先停止（注意：不能在 async 方法中 await 调用自己，
-        # 因为 _speaking 在这里设为 True 后 stop 会重置它）
+        volume = max(0.0, min(1.0, volume))
+
+        # 如果正在朗读，先停止
         if self._speaking:
-            self._stop_flag.set()
-            try:
-                self._voice.Speak("", 2)
-            except Exception:
-                pass
-            self._speaking = False
+            await self.stop()
 
         self._stop_flag.clear()
 
-        def _speak_sync() -> None:
-            """在子线程中同步执行 SAPI Speak。"""
-            try:
-                pythoncom.CoInitialize()
-                voice = win32com.client.Dispatch("SAPI.SpVoice")
+        if chosen == "edge-tts":
+            return await self._speak_edge(text, rate, volume)
+        else:
+            return await self._speak_pyttsx3(text, rate, volume)
 
-                # 设置语音引擎
-                if voice_name:
-                    self._set_voice(voice, voice_name)
-
-                voice.Rate = rate
-                voice.Volume = volume
-
-                # SVSFlagsAsync = 1, SVSFPurgeBeforeSpeak = 2
-                voice.Speak(text, 1 | 2)
-
-                # 等待朗读完成或被停止
-                voice.WaitUntilDone(-1)
-            except Exception as e:
-                logger.error(f"TTS 朗读失败: {e}")
-            finally:
-                self._speaking = False
-                try:
-                    pythoncom.CoUninitialize()
-                except Exception:
-                    pass
-
-        self._speaking = True
-        self._speak_thread = threading.Thread(target=_speak_sync, daemon=True)
-        self._speak_thread.start()
-
-        current_voice = voice_name or "default"
-        return {
-            "status": "speaking",
-            "text": text[:200],  # 截断长文本
-            "voice": current_voice,
-            "rate": rate,
-            "volume": volume,
-        }
-
-    async def list_voices(self) -> list[dict[str, Any]]:
-        """列出系统可用的语音引擎。
+    async def list_voices(self) -> dict[str, Any]:
+        """列出可用语音引擎和语音。
 
         Returns:
-            语音引擎列表，每项包含::
+            结果字典::
 
                 {
-                    "name": "Microsoft Huihui Desktop",
-                    "language": "zh-CN",
-                    "gender": "Female",
-                    "description": "Microsoft Huihui Desktop - Chinese ..."
+                    "status": "ok",
+                    "engines": ["edge-tts", "pyttsx3"],
+                    "voices": [
+                        {"name": "zh-CN-XiaoxiaoNeural", "language": "zh-CN", ...},
+                        ...
+                    ]
                 }
         """
-        if not _SAPI_AVAILABLE or self._voice is None:
-            return [{"error": "TTS 仅支持 Windows 平台（SAPI COM 接口）"}]
+        engines: list[str] = []
+        if _EDGE_TTS_AVAILABLE:
+            engines.append("edge-tts")
+        if _PYTTSX3_AVAILABLE:
+            engines.append("pyttsx3")
 
         voices: list[dict[str, Any]] = []
-        try:
-            voice_tokens = self._voice.GetVoices()
-            for i in range(voice_tokens.Count):
-                token = voice_tokens.Item(i)
-                desc = token.GetDescription()
-                # 尝试提取语言和性别信息
-                lang = self._extract_voice_attr(token, "Language")
-                gender = self._extract_voice_attr(token, "Gender")
-                name = self._extract_voice_attr(token, "Name") or desc
 
-                voices.append({
-                    "name": name,
-                    "language": lang,
-                    "gender": gender,
-                    "description": desc,
-                })
-        except Exception as e:
-            logger.error(f"获取语音列表失败: {e}")
-            return [{"error": f"获取语音列表失败: {e}"}]
+        # 尝试获取 edge-tts 的语音列表
+        if _EDGE_TTS_AVAILABLE:
+            try:
+                raw = await edge_tts.list_voices()
+                for v in raw[:20]:  # 限制数量避免过大
+                    voices.append({
+                        "name": v.get("ShortName", v.get("Name", "unknown")),
+                        "language": v.get("Locale", "unknown"),
+                        "gender": v.get("Gender", "unknown"),
+                        "engine": "edge-tts",
+                    })
+            except Exception as e:
+                logger.warning(f"获取 edge-tts 语音列表失败: {e}")
 
-        return voices
+        # 尝试获取 pyttsx3 的语音列表
+        if _PYTTSX3_AVAILABLE and not voices:
+            try:
+                eng = self._ensure_pyttsx3()
+                if eng:
+                    for v in eng.getProperty("voices"):
+                        voices.append({
+                            "name": v.name,
+                            "language": v.languages[0] if v.languages else "unknown",
+                            "id": v.id,
+                            "engine": "pyttsx3",
+                        })
+            except Exception as e:
+                logger.warning(f"获取 pyttsx3 语音列表失败: {e}")
+
+        return {
+            "status": "ok",
+            "engines": engines,
+            "voices": voices,
+        }
 
     async def save_to_file(
         self,
         text: str,
-        output_path: str,
-        voice_name: str | None = None,
+        path: str,
+        engine: str = "default",
+        rate: int = 200,
     ) -> dict[str, Any]:
-        """将语音保存到 WAV 文件。
+        """将语音保存为音频文件。
 
         Args:
             text: 要合成的文本内容
-            output_path: 输出 WAV 文件路径
-            voice_name: 语音引擎名称（可选）
+            path: 输出文件路径（相对工作空间）
+            engine: TTS 引擎
+            rate: 语速
 
         Returns:
-            操作结果字典::
-
-                {
-                    "status": "saved",
-                    "path": "output.wav",
-                    "text_length": 42
-                }
+            操作结果字典，包含 status / path 等字段
         """
-        if not _SAPI_AVAILABLE or self._voice is None:
-            return _unsupported()
-
         if not text or not text.strip():
             return {"error": "文本内容不能为空"}
 
-        # 确保输出目录存在
-        out = Path(output_path)
-        out.parent.mkdir(parents=True, exist_ok=True)
+        chosen = _pick_engine(engine)
+        if chosen == "none":
+            return {"error": "没有可用的 TTS 引擎"}
 
         try:
-            # 创建文件输出流
-            stream = win32com.client.Dispatch("SAPI.SpFileStream")
-            # SSFCreateForWrite = 2
-            stream.Open(str(out.resolve()), 2)
-
-            # 创建独立的 voice 用于文件输出
-            file_voice = win32com.client.Dispatch("SAPI.SpVoice")
-            file_voice.AudioOutputStream = stream
-
-            if voice_name:
-                self._set_voice(file_voice, voice_name)
-
-            # 同步执行（在子线程中避免阻塞事件循环）
-            def _save_sync() -> None:
-                try:
-                    pythoncom.CoInitialize()
-                    v = win32com.client.Dispatch("SAPI.SpVoice")
-                    s = win32com.client.Dispatch("SAPI.SpFileStream")
-                    s.Open(str(out.resolve()), 2)
-                    v.AudioOutputStream = s
-                    if voice_name:
-                        self._set_voice(v, voice_name)
-                    v.Speak(text, 0)  # 同步朗读
-                    s.Close()
-                except Exception as exc:
-                    logger.error(f"保存语音文件失败: {exc}")
-                finally:
-                    try:
-                        pythoncom.CoUninitialize()
-                    except Exception:
-                        pass
-
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, _save_sync)
-
-            # 验证文件存在
-            if out.exists():
-                size = out.stat().st_size
-                return {
-                    "status": "saved",
-                    "path": str(out),
-                    "text_length": len(text),
-                    "file_size": size,
-                }
-            else:
-                return {"error": "文件保存失败，输出文件不存在"}
-
+            safe_path = safe_resolve_path(
+                _WORKSPACE, path, allow_create_parents=True
+            )
         except Exception as e:
-            logger.error(f"保存语音文件失败: {e}")
-            return {"error": f"保存语音文件失败: {e}"}
+            return {"error": f"路径不安全: {e}"}
+
+        if chosen == "edge-tts":
+            return await self._save_edge(text, safe_path, rate)
+        else:
+            return await self._save_pyttsx3(text, safe_path, rate)
 
     async def stop(self) -> dict[str, Any]:
         """停止当前朗读。
 
         Returns:
-            操作结果字典::
-
-                {"status": "stopped"}
+            操作结果字典
         """
-        if not _SAPI_AVAILABLE or self._voice is None:
-            return _unsupported()
-
         self._stop_flag.set()
-
-        # 在主 COM 对象上停止
-        try:
-            # SVSFPurgeBeforeSpeak = 2 — 清空缓冲区并停止
-            self._voice.Speak("", 2)
-        except Exception as e:
-            logger.debug(f"停止朗读时出现异常（可能未在朗读）: {e}")
-
         self._speaking = False
+
+        # 尝试停止 pyttsx3
+        if _PYTTSX3_AVAILABLE:
+            try:
+                eng = self._ensure_pyttsx3()
+                if eng:
+                    eng.stop()
+            except Exception:
+                pass
+
         return {"status": "stopped"}
 
     # ------------------------------------------------------------------
-    # 内部辅助方法
+    # edge-tts 实现
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _set_voice(voice: Any, voice_name: str) -> bool:
-        """为 SpVoice 对象设置指定语音引擎。
-
-        Args:
-            voice: SAPI SpVoice COM 对象
-            voice_name: 语音引擎名称（支持模糊匹配）
-
-        Returns:
-            是否成功设置
-        """
+    async def _speak_edge(
+        self, text: str, rate: int, volume: float
+    ) -> dict[str, Any]:
+        """使用 edge-tts 朗读。edge-tts 原生异步，直接 await。"""
         try:
-            voice_tokens = voice.GetVoices()
-            for i in range(voice_tokens.Count):
-                token = voice_tokens.Item(i)
-                desc = token.GetDescription()
-                if voice_name.lower() in desc.lower():
-                    voice.Voice = token
-                    return True
-            logger.warning(f"未找到匹配的语音引擎: {voice_name}")
-            return False
+            # rate: edge-tts 格式 "+0%", "+50%", "-20%"
+            rate_pct = (rate - 200) // 2  # 近似映射
+            rate_str = f"+{rate_pct}%" if rate_pct >= 0 else f"{rate_pct}%"
+            # volume: "+0%", "-50%" 等
+            vol_pct = int((volume - 1.0) * 100)
+            vol_str = f"+{vol_pct}%" if vol_pct >= 0 else f"{vol_pct}%"
+
+            communicate = edge_tts.Communicate(
+                text, rate=rate_str, volume=vol_str
+            )
+
+            # 使用后台任务播放音频
+            self._speaking = True
+
+            def _play_sync() -> None:
+                """在子线程中收集音频并通过系统播放。"""
+                try:
+                    import subprocess
+                    import tempfile
+
+                    # 保存到临时文件然后播放
+                    tmp = Path(tempfile.mktemp(suffix=".mp3"))
+                    loop = asyncio.new_event_loop()
+                    try:
+                        # 同步收集音频数据
+                        audio_data = io.BytesIO()
+
+                        async def _collect() -> None:
+                            async for chunk in communicate.stream():
+                                if chunk["type"] == "audio":
+                                    audio_data.write(chunk["data"])
+
+                        loop.run_until_complete(_collect())
+                    finally:
+                        loop.close()
+
+                    tmp.write_bytes(audio_data.getvalue())
+
+                    if not self._stop_flag.is_set():
+                        # Windows: 使用系统默认播放器
+                        os.startfile(str(tmp))  # type: ignore[attr-defined]
+                except Exception as exc:
+                    logger.error(f"edge-tts 播放失败: {exc}")
+                finally:
+                    self._speaking = False
+                    # 清理临时文件
+                    try:
+                        if tmp.exists():
+                            tmp.unlink()
+                    except Exception:
+                        pass
+
+            self._speak_thread = threading.Thread(
+                target=_play_sync, daemon=True
+            )
+            self._speak_thread.start()
+
+            return {
+                "status": "speaking",
+                "text": text[:200],
+                "engine": "edge-tts",
+                "rate": rate,
+                "volume": volume,
+            }
         except Exception as e:
-            logger.error(f"设置语音引擎失败: {e}")
-            return False
+            logger.error(f"edge-tts 朗读失败: {e}")
+            self._speaking = False
+            return {"error": f"edge-tts 朗读失败: {e}"}
 
-    @staticmethod
-    def _extract_voice_attr(token: Any, attr_name: str) -> str:
-        """从语音令牌中提取属性值。
-
-        Args:
-            token: SAPI 语音令牌对象
-            attr_name: 属性名称（如 Language, Gender, Name）
-
-        Returns:
-            属性值字符串，获取失败时返回 "unknown"
-        """
+    async def _save_edge(
+        self, text: str, output_path: Path, rate: int
+    ) -> dict[str, Any]:
+        """使用 edge-tts 保存到文件。"""
         try:
-            # 尝试通过 Registry 获取属性
-            value = token.GetAttribute(attr_name) or ""
-            if value and attr_name == "Language":
-                # Language 返回的是 LANGID 数字，映射为常见代码
-                lang_map = {
-                    "0804": "zh-CN",
-                    "0409": "en-US",
-                    "0411": "ja-JP",
-                    "0412": "ko-KR",
-                    "040C": "fr-FR",
-                    "0407": "de-DE",
-                    "040A": "es-ES",
-                }
-                hex_str = hex(int(value))[2:].upper().zfill(4)
-                return lang_map.get(hex_str, value)
-            return value if value else "unknown"
-        except Exception:
-            return "unknown"
+            rate_pct = (rate - 200) // 2
+            rate_str = f"+{rate_pct}%" if rate_pct >= 0 else f"{rate_pct}%"
+
+            communicate = edge_tts.Communicate(text, rate=rate_str)
+            await communicate.save(str(output_path))
+
+            size = output_path.stat().st_size if output_path.exists() else 0
+            return {
+                "status": "saved",
+                "path": str(output_path),
+                "engine": "edge-tts",
+                "text_length": len(text),
+                "file_size": size,
+            }
+        except Exception as e:
+            logger.error(f"edge-tts 保存失败: {e}")
+            return {"error": f"edge-tts 保存失败: {e}"}
+
+    # ------------------------------------------------------------------
+    # pyttsx3 实现
+    # ------------------------------------------------------------------
+
+    async def _speak_pyttsx3(
+        self, text: str, rate: int, volume: float
+    ) -> dict[str, Any]:
+        """使用 pyttsx3 朗读。"""
+        eng = self._ensure_pyttsx3()
+        if eng is None:
+            return {"error": "pyttsx3 引擎不可用"}
+
+        self._speaking = True
+
+        def _speak_sync() -> None:
+            try:
+                eng.setProperty("rate", rate)
+                eng.setProperty("volume", volume)
+                eng.say(text)
+                eng.runAndWait()
+            except Exception as exc:
+                logger.error(f"pyttsx3 朗读失败: {exc}")
+            finally:
+                self._speaking = False
+
+        self._speak_thread = threading.Thread(target=_speak_sync, daemon=True)
+        self._speak_thread.start()
+
+        return {
+            "status": "speaking",
+            "text": text[:200],
+            "engine": "pyttsx3",
+            "rate": rate,
+            "volume": volume,
+        }
+
+    async def _save_pyttsx3(
+        self, text: str, output_path: Path, rate: int
+    ) -> dict[str, Any]:
+        """使用 pyttsx3 保存到文件。"""
+        eng = self._ensure_pyttsx3()
+        if eng is None:
+            return {"error": "pyttsx3 引擎不可用"}
+
+        def _save_sync() -> None:
+            try:
+                eng.setProperty("rate", rate)
+                eng.save_to_file(str(output_path))
+                eng.runAndWait()
+            except Exception as exc:
+                logger.error(f"pyttsx3 保存失败: {exc}")
+
+        await asyncio.to_thread(_save_sync)
+
+        if output_path.exists():
+            size = output_path.stat().st_size
+            return {
+                "status": "saved",
+                "path": str(output_path),
+                "engine": "pyttsx3",
+                "text_length": len(text),
+                "file_size": size,
+            }
+        return {"error": "文件保存失败，输出文件不存在", "path": str(output_path)}
