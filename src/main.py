@@ -15,6 +15,7 @@ from rich.prompt import Prompt
 
 from src.agents.base_agent import BaseAgent
 from src.platforms import create_platform_adapter
+from src.tools.code_dev import CodeDev
 from src.tools.system_control import SystemControl
 from src.utils.config import load_config
 from src.utils.logger import get_logger, setup_logger
@@ -31,11 +32,18 @@ def create_agent() -> BaseAgent:
     platform_adapter = create_platform_adapter(config)
     agent = BaseAgent(config, platform=platform_adapter)
 
-    # 注册基础工具
+    # 注册系统控制工具
     if config.tools.system_control.enabled:
-        agent.register_tool("system_control", SystemControl())
-        agent.register_tool("shell", SystemControl())
+        system_tool = SystemControl()
+        agent.register_tool("system_control", system_tool)
+        agent.register_tool("shell", system_tool)
         logger.info("系统控制工具已注册")
+
+    # 注册代码开发工具
+    if config.tools.code_dev.enabled:
+        code_dev = CodeDev()
+        agent.register_tool("code_dev", code_dev)
+        logger.info("代码开发工具已注册")
 
     return agent
 
