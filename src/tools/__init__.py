@@ -24,7 +24,9 @@ from src.tools.photoshop_control import PhotoshopControl
 from src.tools.premiere_control import PremiereControl
 from src.tools.process_manager import ProcessManager
 from src.tools.system_control import SystemControl
+from src.tools.app_launcher import AppLauncher
 from src.tools.automation_engine import AutomationEngine
+from src.tools.plugin_manager import PluginManager
 from src.tools.system_monitor import SystemMonitor
 from src.tools.network_ops import NetworkOps
 from src.tools.smart_scheduler import SmartScheduler
@@ -67,6 +69,8 @@ TOOL_REGISTRY: dict[str, type] = {
     "smart_scheduler": SmartScheduler,
     "system_monitor": SystemMonitor,
     "automation_engine": AutomationEngine,
+    "plugin_manager": PluginManager,
+    "app_launcher": AppLauncher,
 }
 
 # 工具元数据：名称 → _ToolMeta
@@ -128,5 +132,11 @@ TOOL_METADATA: dict[str, _ToolMeta] = {
     ),
     "automation_engine": _ToolMeta(
         description="自动化引擎：事件驱动规则系统，支持文件变化/定时/系统/进程触发器",
+    ),
+    "plugin_manager": _ToolMeta(
+        description="插件管理器：动态加载、卸载、启用/禁用外部技能插件",
+    ),
+    "app_launcher": _ToolMeta(
+        description="应用启动器：通过名称/路径启动桌面应用、搜索已安装程序、管理应用窗口",
     ),
 }
