@@ -411,7 +411,7 @@ class BaseAgent:
         context = self._build_context()
 
         # 从长期记忆检索相关经验
-        if self._long_term_memory.is_available and user_input.strip():
+        if self._long_term_memory and self._long_term_memory.is_available and user_input.strip():
             try:
                 memories = await self._long_term_memory.recall(
                     user_input, top_k=3, category=None
@@ -428,6 +428,28 @@ class BaseAgent:
 
         return context
 
+    async def close(self) -> None:
+        """释放 Agent 持有的所有资源。
+
+        关闭 LLM 连接池，清理长期记忆引用。
+        调用后 Agent 不再可用。
+        """
+        if self._llm is not None:
+            await self._llm.close()
+            logger.info("LLM 连接池已关闭")
+
+        # 清理长期记忆引用（ChromaDB 使用 PersistentClient，无需显式关闭）
+        self._long_term_memory = None  # type: ignore[assignment]
+        logger.info("Agent 资源已释放")
+
+    async def __aenter__(self) -> BaseAgent:
+        """异步上下文管理器入口。"""
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """异步上下文管理器出口，自动释放资源。"""
+        await self.close()
+
     @property
     def is_running(self) -> bool:
         """Agent 是否正在运行。"""
@@ -440,6 +462,8 @@ class BaseAgent:
             "running": self._running,
             "scheduler": self._scheduler.get_status(),
             "memory_size": self._memory.size,
-            "long_term_memory_count": self._long_term_memory.count,
+            "long_term_memory_count": (
+                self._long_term_memory.count if self._long_term_memory else 0
+            ),
             "pending_decision": self._pending is not None,
         }

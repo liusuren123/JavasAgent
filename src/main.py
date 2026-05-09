@@ -52,13 +52,6 @@ def create_agent() -> BaseAgent:
         agent.register_tool("browser_control", browser)
         logger.info("浏览器控制工具已注册")
 
-    # 初始化长期记忆（异步操作，用 asyncio.run）
-    try:
-        asyncio.run(agent.initialize_memory())
-    except RuntimeError:
-        # 已有事件循环时跳过（如在 async 上下文中被调用）
-        logger.debug("跳过长期记忆初始化（事件循环已存在）")
-
     return agent
 
 
@@ -84,24 +77,29 @@ def chat() -> None:
 
     agent = create_agent()
 
-    while True:
-        try:
-            user_input = Prompt.ask("[bold green]你[/bold green]")
-            if user_input.strip().lower() in ("exit", "quit", "q"):
-                console.print("[dim]再见，老板。[/dim]")
-                break
+    async def _chat_loop() -> None:
+        async with agent:
+            await agent.initialize_memory()
+            while True:
+                try:
+                    user_input = Prompt.ask("[bold green]你[/bold green]")
+                    if user_input.strip().lower() in ("exit", "quit", "q"):
+                        console.print("[dim]再见，老板。[/dim]")
+                        break
 
-            if not user_input.strip():
-                continue
+                    if not user_input.strip():
+                        continue
 
-            result = asyncio.run(agent.process(user_input))
-            console.print(f"[bold blue]Javas[/bold blue]: {result}")
+                    result = await agent.process(user_input)
+                    console.print(f"[bold blue]Javas[/bold blue]: {result}")
 
-        except KeyboardInterrupt:
-            console.print("\n[dim]再见，老板。[/dim]")
-            break
-        except Exception as e:
-            console.print(f"[red]错误: {e}[/red]")
+                except KeyboardInterrupt:
+                    console.print("\n[dim]再见，老板。[/dim]")
+                    break
+                except Exception as e:
+                    console.print(f"[red]错误: {e}[/red]")
+
+    asyncio.run(_chat_loop())
 
 
 @cli.command()
@@ -109,7 +107,13 @@ def chat() -> None:
 def run(command: str) -> None:
     """执行单条命令。"""
     agent = create_agent()
-    result = asyncio.run(agent.process(command))
+
+    async def _run_once() -> str:
+        async with agent:
+            await agent.initialize_memory()
+            return await agent.process(command)
+
+    result = asyncio.run(_run_once())
     console.print(result)
 
 

@@ -386,6 +386,63 @@ class TestScreenIntegration:
         agent._screen_analyzer.describe.assert_called_once_with(b"fake_png")
 
 
+class TestLifecycleManagement:
+    """测试资源生命周期管理。"""
+
+    @pytest.mark.asyncio
+    async def test_close_releases_resources(self) -> None:
+        """close() 应释放 LLM 连接池。"""
+        config = _make_config()
+        agent = BaseAgent(config)
+
+        mock_llm = AsyncMock()
+        agent._llm = mock_llm
+
+        await agent.close()
+        mock_llm.close.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_context_manager_calls_close(self) -> None:
+        """async with 应在退出时调用 close()。"""
+        config = _make_config()
+        agent = BaseAgent(config)
+
+        mock_llm = AsyncMock()
+        agent._llm = mock_llm
+
+        async with agent:
+            pass  # 使用 agent
+
+        mock_llm.close.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_context_manager_returns_agent(self) -> None:
+        """async with 应返回 agent 实例。"""
+        config = _make_config()
+        agent = BaseAgent(config)
+
+        async with agent as a:
+            assert a is agent
+
+    @pytest.mark.asyncio
+    async def test_status_after_close(self) -> None:
+        """close() 后 status 不应崩溃。"""
+        config = _make_config()
+        agent = BaseAgent(config)
+        await agent.close()
+
+        s = agent.status
+        assert s["long_term_memory_count"] == 0
+
+    @pytest.mark.asyncio
+    async def test_close_idempotent(self) -> None:
+        """多次调用 close() 不应报错。"""
+        config = _make_config()
+        agent = BaseAgent(config)
+        await agent.close()
+        await agent.close()  # 不应抛异常
+
+
 class TestPlatformIntegration:
     """测试 BaseAgent 与 PlatformAdapter 的集成。"""
 
