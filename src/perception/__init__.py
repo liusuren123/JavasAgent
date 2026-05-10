@@ -21,6 +21,7 @@ from src.perception.ocr_models import (
     TextLocation,
 )
 from src.perception.screen_analyzer import ScreenAnalyzer
+from src.perception.vision_eye import VisionEye, VisionFrame
 from src.perception.window_manager import WindowInfo, WindowManager
 
 __all__ = [
@@ -35,6 +36,8 @@ __all__ = [
     "SceneType",
     "ScreenAnalyzer",
     "SuggestedAction",
+    "VisionEye",
+    "VisionFrame",
     "TextBlock",
     "TextElement",
     "TextLocation",
