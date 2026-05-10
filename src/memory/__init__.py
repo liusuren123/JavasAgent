@@ -8,6 +8,8 @@ from src.memory.skill_registry import SkillRegistry
 from src.memory.skill_learner import SkillLearner
 from src.memory.skill_auto_updater import SkillAutoUpdater
 from src.memory.skill_auto_updater_models import SkillUpdate, ToolUsageRecord
+from src.memory.user_preference import UserPreferenceEngine
+from src.memory.user_preference_models import PreferenceData, WorkHourPattern
 
 __all__ = [
     "KnowledgeBase",
@@ -24,4 +26,7 @@ __all__ = [
     "SkillRegistry",
     "SkillUpdate",
     "ToolUsageRecord",
+    "UserPreferenceEngine",
+    "PreferenceData",
+    "WorkHourPattern",
 ]
