@@ -109,7 +109,7 @@ class TestPathSafetyIntegration:
 
         tool = SystemControl(workspace=str(workspace))
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             tool.execute("read_file", {"path": "../../../etc/passwd"})
         )
         assert "error" in result
@@ -123,7 +123,7 @@ class TestPathSafetyIntegration:
 
         tool = SystemControl(workspace=str(workspace))
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             tool.execute("read_file", {"path": "config.yaml"})
         )
         assert "content" in result
@@ -137,7 +137,7 @@ class TestPathSafetyIntegration:
 
         tool = CodeDev(workspace=str(workspace))
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             tool.execute("read_code", {"path": "../../../etc/passwd"})
         )
         assert "error" in result
@@ -151,7 +151,7 @@ class TestPathSafetyIntegration:
 
         tool = CodeDev(workspace=str(workspace))
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             tool.execute("read_code", {"path": "src/main.py"})
         )
         assert "content" in result
@@ -165,7 +165,7 @@ class TestPathSafetyIntegration:
 
         tool = SystemControl(workspace=str(workspace))
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             tool.execute("write_file", {
                 "path": "../../../tmp/malicious.py",
                 "content": "evil",
@@ -181,7 +181,7 @@ class TestPathSafetyIntegration:
 
         tool = SystemControl(workspace=str(workspace))
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             tool.execute("delete_file", {"path": "../../../important_file"})
         )
         assert "error" in result
@@ -194,7 +194,7 @@ class TestPathSafetyIntegration:
 
         tool = CodeDev(workspace=str(workspace))
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             tool.execute("edit_code", {
                 "path": "../../../tmp/evil.py",
                 "pattern": "old",
