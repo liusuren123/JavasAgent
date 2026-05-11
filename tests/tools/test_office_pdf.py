@@ -6,7 +6,7 @@
     - merge_pdfs: 合并 PDF
     - extract_pages: 提取页面
 
-依赖：pytest, PyPDF2, reportlab（创建测试需要）
+依赖：pytest, pypdf, reportlab（创建测试需要）
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from src.tools.office_pdf import (
 
 def _run(coro: Any) -> Any:
     """在测试中运行异步协程。"""
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 def _make_sample_pdf(path: Path, pages: int = 3) -> Path:
@@ -293,7 +293,7 @@ class TestMergePdfs:
         assert "error" not in result
 
         # 验证合并后的页数
-        from PyPDF2 import PdfReader
+        from pypdf import PdfReader
 
         reader = PdfReader(str(workspace / "merged_check.pdf"))
         assert len(reader.pages) == 4  # 2 + 2
@@ -416,7 +416,7 @@ class TestExtractPages:
         )
 
         # 验证提取后的文件页数
-        from PyPDF2 import PdfReader
+        from pypdf import PdfReader
 
         reader = PdfReader(str(workspace / "extracted.pdf"))
         assert len(reader.pages) == 1

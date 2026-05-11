@@ -3,7 +3,7 @@
 提供 PDF 文件的读取、创建、合并、页面提取能力。
 
 依赖：
-    - PyPDF2: PDF 读取、合并、页面提取（必须）
+    - pypdf: PDF 读取、合并、页面提取（必须，替代已弃用的 PyPDF2）
     - pypdfium2: PDF 文本提取（优先）
     - pdfminer.six: PDF 文本提取（回退）
 """
@@ -275,15 +275,16 @@ async def merge_pdfs(workspace: Path, params: dict) -> dict:
         resolved_paths.append(rp)
 
     try:
-        from PyPDF2 import PdfMerger
+        from pypdf import PdfReader, PdfWriter
 
-        merger = PdfMerger()
+        writer = PdfWriter()
         for rp in resolved_paths:
-            merger.append(str(rp))
+            reader = PdfReader(str(rp))
+            writer.append_pages_from_reader(reader)
 
         output.parent.mkdir(parents=True, exist_ok=True)
-        merger.write(str(output))
-        merger.close()
+        with open(str(output), "wb") as f:
+            writer.write(f)
 
         logger.info(f"合并 PDF: {len(resolved_paths)} 个文件 -> {output}")
         return {
@@ -293,7 +294,7 @@ async def merge_pdfs(workspace: Path, params: dict) -> dict:
             "status": "merged",
         }
     except ImportError:
-        return {"error": "合并 PDF 需要 PyPDF2 库，请安装: pip install PyPDF2"}
+        return {"error": "合并 PDF 需要 pypdf 库，请安装: pip install pypdf"}
     except Exception as e:
         logger.error(f"合并 PDF 失败: {e}")
         return {"error": f"合并失败: {e}"}
@@ -327,7 +328,7 @@ async def extract_pages(workspace: Path, params: dict) -> dict:
         return {"error": str(e)}
 
     try:
-        from PyPDF2 import PdfReader, PdfWriter
+        from pypdf import PdfReader, PdfWriter
 
         reader = PdfReader(str(path))
         total_pages = len(reader.pages)
@@ -362,7 +363,7 @@ async def extract_pages(workspace: Path, params: dict) -> dict:
             "status": "extracted",
         }
     except ImportError:
-        return {"error": "提取页面需要 PyPDF2 库，请安装: pip install PyPDF2"}
+        return {"error": "提取页面需要 pypdf 库，请安装: pip install pypdf"}
     except Exception as e:
         logger.error(f"提取 PDF 页面失败: {e}")
         return {"error": f"提取失败: {e}"}
