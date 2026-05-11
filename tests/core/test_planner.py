@@ -286,3 +286,99 @@ class TestToolRegistration:
         planner = self._make_planner()
         plan = planner._parse_plan("不是JSON", "测试意图")
         assert plan.steps[0].tool == "shell"
+
+
+class TestCircularDependencyDetection:
+    """测试循环依赖检测。"""
+
+    def _make_planner(self) -> Planner:
+        mock_llm = AsyncMock()
+        return Planner(mock_llm)
+
+    def test_simple_cycle(self) -> None:
+        """step_0 依赖 step_1, step_1 依赖 step_0 → 抛出 ValueError。"""
+        planner = self._make_planner()
+        response = json.dumps({
+            "steps": [
+                {"action": "步骤A", "tool": "shell", "params": {}, "depends_on": [1]},
+                {"action": "步骤B", "tool": "shell", "params": {}, "depends_on": [0]},
+            ],
+            "priority": 5,
+        })
+        with pytest.raises(ValueError, match="循环依赖"):
+            planner._parse_plan(response, "循环测试")
+
+    def test_self_dependency(self) -> None:
+        """step_0 依赖自身 → 抛出 ValueError。"""
+        planner = self._make_planner()
+        response = json.dumps({
+            "steps": [
+                {"action": "自依赖", "tool": "shell", "params": {}, "depends_on": [0]},
+            ],
+            "priority": 5,
+        })
+        with pytest.raises(ValueError, match="循环依赖"):
+            planner._parse_plan(response, "自依赖测试")
+
+    def test_three_node_cycle(self) -> None:
+        """step_0 → step_1 → step_2 → step_0 → 抛出 ValueError。"""
+        planner = self._make_planner()
+        response = json.dumps({
+            "steps": [
+                {"action": "A", "tool": "shell", "params": {}, "depends_on": [2]},
+                {"action": "B", "tool": "shell", "params": {}, "depends_on": [0]},
+                {"action": "C", "tool": "shell", "params": {}, "depends_on": [1]},
+            ],
+            "priority": 5,
+        })
+        with pytest.raises(ValueError, match="循环依赖"):
+            planner._parse_plan(response, "三节点循环")
+
+    def test_no_cycle_valid(self) -> None:
+        """step_0 无依赖, step_1 依赖 step_0 → 不抛异常。"""
+        planner = self._make_planner()
+        response = json.dumps({
+            "steps": [
+                {"action": "步骤A", "tool": "shell", "params": {}, "depends_on": []},
+                {"action": "步骤B", "tool": "shell", "params": {}, "depends_on": [0]},
+            ],
+            "priority": 5,
+        })
+        plan = planner._parse_plan(response, "无循环")
+        assert len(plan.steps) == 2
+
+    def test_no_cycle_chain(self) -> None:
+        """链式依赖 step_0 → step_1 → step_2 → step_3 → 不抛异常。"""
+        planner = self._make_planner()
+        response = json.dumps({
+            "steps": [
+                {"action": "A", "tool": "shell", "params": {}, "depends_on": []},
+                {"action": "B", "tool": "shell", "params": {}, "depends_on": [0]},
+                {"action": "C", "tool": "shell", "params": {}, "depends_on": [1]},
+                {"action": "D", "tool": "shell", "params": {}, "depends_on": [2]},
+            ],
+            "priority": 5,
+        })
+        plan = planner._parse_plan(response, "链式依赖")
+        assert len(plan.steps) == 4
+
+    def test_complex_dag(self) -> None:
+        """复杂 DAG: 多分支汇合，无环 → 不抛异常。
+
+        step_0 (root)
+        ├── step_1 (depends: step_0)
+        ├── step_2 (depends: step_0)
+        └── step_3 (depends: step_1, step_2)
+        """
+        planner = self._make_planner()
+        response = json.dumps({
+            "steps": [
+                {"action": "root", "tool": "shell", "params": {}, "depends_on": []},
+                {"action": "branch_a", "tool": "shell", "params": {}, "depends_on": [0]},
+                {"action": "branch_b", "tool": "shell", "params": {}, "depends_on": [0]},
+                {"action": "merge", "tool": "shell", "params": {}, "depends_on": [1, 2]},
+            ],
+            "priority": 5,
+        })
+        plan = planner._parse_plan(response, "复杂DAG")
+        assert len(plan.steps) == 4

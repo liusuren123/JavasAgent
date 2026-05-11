@@ -165,6 +165,42 @@ class Planner:
         new_plan.parent_id = original.id
         return new_plan
 
+    @staticmethod
+    def _detect_circular_dependency(steps: list[Step]) -> None:
+        """检测步骤间的循环依赖，发现环时抛出 ValueError。
+
+        使用 DFS 三色标记法，时间复杂度 O(V+E)。
+        """
+        WHITE, GRAY, BLACK = 0, 1, 2
+        step_ids = {s.id for s in steps}
+        adj: dict[str, list[str]] = {s.id: [] for s in steps}
+        for s in steps:
+            for dep in s.depends_on:
+                if dep in step_ids:
+                    adj[dep].append(s.id)
+
+        color: dict[str, int] = {sid: WHITE for sid in step_ids}
+        path: list[str] = []
+
+        def dfs(node: str) -> None:
+            color[node] = GRAY
+            path.append(node)
+            for neighbor in adj[node]:
+                if color[neighbor] == GRAY:
+                    cycle_start = path.index(neighbor)
+                    cycle = path[cycle_start:] + [neighbor]
+                    raise ValueError(
+                        f"检测到循环依赖: {' -> '.join(cycle)}"
+                    )
+                if color[neighbor] == WHITE:
+                    dfs(neighbor)
+            path.pop()
+            color[node] = BLACK
+
+        for sid in step_ids:
+            if color[sid] == WHITE:
+                dfs(sid)
+
     def _parse_plan(self, llm_response: str, original_intent: str) -> TaskPlan:
         """解析 LLM 返回的 JSON 为 TaskPlan。"""
         try:
@@ -205,6 +241,10 @@ class Planner:
             priority = Priority(priority_val)
         except ValueError:
             priority = Priority.NORMAL
+
+        # 检测循环依赖
+        if steps:
+            self._detect_circular_dependency(steps)
 
         return TaskPlan(
             id=f"plan_{uuid.uuid4().hex[:8]}",
