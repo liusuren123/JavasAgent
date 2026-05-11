@@ -151,7 +151,110 @@
 
 ---
 
-## 6. 文件结构规范
+## 6. 语音管道架构
+
+语音模块采用状态机模式，完整管道：
+
+```
+┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+│  唤醒词   │ →  │   VAD    │ →  │   STT    │ →  │  Agent   │ →  │   TTS    │
+│ Detector │    │ 语音检测  │    │ 语音转文  │    │  处理    │    │ 文转语音  │
+└──────────┘    └──────────┘    └──────────┘    └──────────┘    └──────────┘
+```
+
+### 状态机
+
+```
+IDLE → LISTENING → PROCESSING → SPEAKING → IDLE
+```
+
+- **IDLE**：等待唤醒词（或免唤醒直接进入 LISTENING）
+- **LISTENING**：录制用户语音，VAD 检测静音后自动停止
+- **PROCESSING**：STT 转文字 → Agent 处理
+- **SPEAKING**：TTS 语音回复，支持打断
+
+### 三级降级
+
+唤醒词检测和 VAD 都有三级自动降级策略，缺少依赖不崩溃：
+
+```
+Porcupine / Silero-VAD   （精度最高）
+    ↓ 不可用
+OpenWakeWord / WebRTC-VAD （中等精度）
+    ↓ 不可用
+VAD 模拟 / 能量检测       （基础功能）
+```
+
+## 7. 感知闭环架构
+
+```
+┌──────────────┐     ┌──────────────────┐     ┌──────────────┐
+│  VisionEye   │ ──→ │ MotorController  │ ──→ │  HumanHand   │
+│  （看）       │     │  （判断）         │     │  （动作）     │
+│  截图+分析    │     │  闭环控制        │     │  拟人操作     │
+└──────────────┘     └──────────────────┘     └──────────────┘
+        ↑                                              │
+        └──────────── 验证结果 ←──────────────────────┘
+```
+
+1. **VisionEye** 截图 → LLM 分析屏幕内容 → 定位目标
+2. **MotorController** 发出操作指令 → 验证操作结果
+3. **HumanHand** 贝塞尔曲线移动 + 随机偏移 → 拟人操作
+4. 闭环验证：操作后重新截图确认结果
+
+## 8. 模块依赖关系
+
+```
+main.py
+  ├── agents/base_agent.py ─── 核心入口
+  │     ├── core/planner.py ────── 任务规划
+  │     ├── core/executor.py ───── 任务执行
+  │     ├── core/decider.py ────── 决策判断
+  │     ├── core/scheduler.py ──── 任务调度
+  │     ├── memory/short_term.py ─ 短期记忆
+  │     ├── memory/long_term.py ── 长期记忆（ChromaDB）
+  │     ├── perception/vision_eye.py ─ 视觉感知
+  │     └── platforms/windows.py ── 平台适配
+  ├── tools/registry.py ──── 工具自动注册
+  │     └── tools/*.py ──────── 30+ 工具模块
+  ├── voice/pipeline.py ──── 语音管道
+  │     ├── voice/wake_word.py ── 唤醒词检测
+  │     ├── voice/vad.py ──────── 语音活动检测
+  │     └── voice/audio_stream.py 音频流管理
+  └── utils/ ──────────────── 配置、日志、LLM 客户端
+```
+
+## 9. 数据流图
+
+```
+用户输入（文本/语音）
+    │
+    ▼
+BaseAgent.process()
+    │
+    ├──→ Planner.plan() ──── 生成 TaskPlan（步骤链）
+    │         │
+    │         ▼
+    ├──→ Decider.should_ask_human() ─── 判断是否确认
+    │         │
+    │         ▼
+    ├──→ Executor.execute(TaskPlan)
+    │         │
+    │         ├──→ Step 1: tool.execute(params)
+    │         ├──→ Step 2: tool.execute(params)（依赖 Step 1）
+    │         └──→ ...
+    │         │
+    │         ▼
+    └──→ ExecutionResult ──── 返回给用户
+              │
+              ▼
+         ShortTermMemory.save() ──── 保存到对话历史
+         LongTermMemory.remember() ─ 保存重要经验（可选）
+```
+
+---
+
+## 10. 文件结构规范
 
 ```
 JavasAgent/
