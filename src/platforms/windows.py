@@ -18,21 +18,44 @@ from src.platforms.base import PlatformAdapter
 def _paste_via_clipboard(text: str) -> None:
     """通过剪贴板粘贴文本，支持中文和特殊字符。
 
-    使用 Win32 API 直接操作剪贴板，绕过 pyautogui.typewrite
-    仅支持 ASCII 字符的限制。
+    优先使用 pyperclip 库操作剪贴板（成熟、跨平台、正确处理 Unicode），
+    若 pyperclip 不可用则回退到 ctypes Win32 API（已修复 64 位兼容性）。
 
     Args:
         text: 要输入的文本
     """
-    import ctypes
     import time
 
+    # 优先使用 pyperclip
+    try:
+        import pyperclip
+
+        pyperclip.copy(text)
+        time.sleep(0.05)
+        pyautogui.hotkey("ctrl", "v")
+        return
+    except ImportError:
+        logger.warning("pyperclip 未安装，尝试 ctypes 回退方案")
+
+    # 回退：使用 ctypes（修复 64 位指针兼容性）
+    import ctypes
+
     CF_UNICODETEXT = 13
+    GMEM_MOVEABLE = 0x0002
 
     kernel32 = ctypes.windll.kernel32
     user32 = ctypes.windll.user32
 
-    # 打开剪贴板并设置内容
+    # 设置参数和返回值类型（修复 64 位系统上指针截断问题）
+    kernel32.GlobalAlloc.restype = ctypes.c_void_p
+    kernel32.GlobalAlloc.argtypes = [ctypes.c_uint, ctypes.c_size_t]
+    kernel32.GlobalLock.restype = ctypes.c_void_p
+    kernel32.GlobalLock.argtypes = [ctypes.c_void_p]
+    kernel32.GlobalUnlock.argtypes = [ctypes.c_void_p]
+    kernel32.GlobalFree.argtypes = [ctypes.c_void_p]
+    user32.SetClipboardData.restype = ctypes.c_void_p
+    user32.SetClipboardData.argtypes = [ctypes.c_uint, ctypes.c_void_p]
+
     if not user32.OpenClipboard(0):
         logger.error("无法打开剪贴板")
         return
@@ -40,9 +63,8 @@ def _paste_via_clipboard(text: str) -> None:
     try:
         user32.EmptyClipboard()
 
-        # 分配全局内存
         text_bytes = text.encode("utf-16-le") + b"\x00\x00"
-        h_mem = kernel32.GlobalAlloc(0x0002, len(text_bytes))  # GMEM_MOVEABLE
+        h_mem = kernel32.GlobalAlloc(GMEM_MOVEABLE, len(text_bytes))
         if not h_mem:
             logger.error("无法分配剪贴板内存")
             return
@@ -63,10 +85,7 @@ def _paste_via_clipboard(text: str) -> None:
     finally:
         user32.CloseClipboard()
 
-    # 短暂延迟确保剪贴板就绪
     time.sleep(0.05)
-
-    # 发送 Ctrl+V 粘贴
     pyautogui.hotkey("ctrl", "v")
 
 

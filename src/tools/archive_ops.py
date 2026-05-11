@@ -41,7 +41,7 @@ _TAR_MODES = {
 
 
 def compress_files(
-    workspace: Path,
+    workspace: Path | str,
     sources: list[str],
     archive_path: str,
     fmt: str = "zip",
@@ -49,7 +49,7 @@ def compress_files(
     """将文件/目录压缩为一个归档。
 
     Args:
-        workspace: 工作空间根目录
+        workspace: 工作空间根目录（Path 或 str 均可）
         sources: 要压缩的文件/目录路径列表（相对 workspace）
         archive_path: 归档文件路径（相对 workspace）
         fmt: 格式，支持 zip/tar/tar.gz/tgz/tar.bz2/tar.xz
@@ -58,6 +58,8 @@ def compress_files(
         ``{"success": True, "archive_path": str, "file_count": int, "size_bytes": int}``
         或 ``{"success": False, "error": str}``
     """
+    workspace = Path(workspace) if not isinstance(workspace, Path) else workspace
+
     canonical = _SUPPORTED_FMT.get(fmt)
     if canonical is None:
         msg = f"不支持的压缩格式 '{fmt}'，支持: {', '.join(_SUPPORTED_FMT)}"
@@ -110,20 +112,22 @@ def compress_files(
 
 
 def decompress_archive(
-    workspace: Path,
+    workspace: Path | str,
     archive_path: str,
     target_dir: str = ".",
 ) -> dict[str, Any]:
     """解压归档到指定目录。
 
     Args:
-        workspace: 工作空间根目录
+        workspace: 工作空间根目录（Path 或 str 均可）
         archive_path: 归档文件路径（相对 workspace）
         target_dir: 目标目录（相对 workspace）
 
     Returns:
         ``{"success": True, "target_dir": str, "file_count": int, "files": list[str]}``
     """
+    workspace = Path(workspace) if not isinstance(workspace, Path) else workspace
+
     try:
         safe_archive = safe_resolve_path(workspace, archive_path)
         safe_target = safe_resolve_path(
@@ -163,12 +167,14 @@ def decompress_archive(
     }
 
 
-def list_archive(workspace: Path, archive_path: str) -> dict[str, Any]:
+def list_archive(workspace: Path | str, archive_path: str) -> dict[str, Any]:
     """列出归档内文件清单。
 
     Returns:
         ``{"success": True, "members": list[dict]}`` 每个 dict 含 name, size, is_dir
     """
+    workspace = Path(workspace) if not isinstance(workspace, Path) else workspace
+
     try:
         safe_archive = safe_resolve_path(workspace, archive_path)
     except PathSafetyError as exc:
@@ -194,7 +200,7 @@ def list_archive(workspace: Path, archive_path: str) -> dict[str, Any]:
 
 
 def extract_single(
-    workspace: Path,
+    workspace: Path | str,
     archive_path: str,
     member_path: str,
     target_dir: str = ".",
@@ -208,6 +214,8 @@ def extract_single(
     Returns:
         ``{"success": True, "extracted_path": str}``
     """
+    workspace = Path(workspace) if not isinstance(workspace, Path) else workspace
+
     try:
         safe_archive = safe_resolve_path(workspace, archive_path)
         safe_target = safe_resolve_path(
@@ -236,13 +244,15 @@ def extract_single(
         return {"success": False, "error": str(exc)}
 
 
-def get_archive_info(workspace: Path, archive_path: str) -> dict[str, Any]:
+def get_archive_info(workspace: Path | str, archive_path: str) -> dict[str, Any]:
     """获取归档元信息。
 
     Returns:
         ``{"success": True, "format": str, "size_bytes": int,
             "file_count": int, "dir_count": int, "compressed_size": int}``
     """
+    workspace = Path(workspace) if not isinstance(workspace, Path) else workspace
+
     try:
         safe_archive = safe_resolve_path(workspace, archive_path)
     except PathSafetyError as exc:
