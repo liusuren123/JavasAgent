@@ -1,0 +1,5 @@
+ERROR: usage: __main__.py [options] [file_or_dir] [file_or_dir] [...]
+__main__.py: error: unrecognized arguments: --tb=line
+  inifile: C:\Users\liusu\.openclaw-autoclaw\agents\agent-programer\workspace\JavasAgent\pyproject.toml
+  rootdir: C:\Users\liusu\.openclaw-autoclaw\agents\agent-programer\workspace\JavasAgent
+

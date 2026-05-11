@@ -1,0 +1,65 @@
+STDOUT:
+........................................................................ [  3%]
+........................................................................ [  7%]
+........................................................................ [ 10%]
+........................................................................ [ 14%]
+........................................................................ [ 17%]
+........................................................................ [ 21%]
+........................................................................ [ 24%]
+........................................................................ [ 28%]
+........................................................................ [ 31%]
+........................................................................ [ 35%]
+........................................................................ [ 39%]
+........................................................................ [ 42%]
+........................................................................ [ 46%]
+........................................................................ [ 49%]
+........................................................................ [ 53%]
+........................................................................ [ 56%]
+........................................................................ [ 60%]
+........................................................................ [ 63%]
+........................................................................ [ 67%]
+........................................................................ [ 71%]
+........................................................................ [ 74%]
+........................................................................ [ 78%]
+........................................................................ [ 81%]
+........................................................................ [ 85%]
+........................................................................ [ 88%]
+........................................................................ [ 92%]
+........................................................................ [ 95%]
+........................................................................ [ 99%]
+..........                                                               [100%]
+============================== warnings summary ===============================
+tests/tools/test_creative_tools.py::TestCreativeToolsPhotoshopDelegation::test_photoshop_control_exception_handled
+tests/utils/test_llm_client.py::TestChat::test_chat_success
+  C:\Users\liusu\AppData\Roaming\Python\Python313\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <function _ProactorBasePipeTransport.__del__ at 0x000001B4E4B07380>
+  
+  Traceback (most recent call last):
+    File "asyncio\proactor_events.py", line 116, in __del__
+    File "asyncio\proactor_events.py", line 80, in __repr__
+    File "asyncio\windows_utils.py", line 102, in fileno
+  ValueError: I/O operation on closed pipe
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/tools/test_creative_tools.py::TestCreativeToolsPhotoshopDelegation::test_photoshop_control_exception_handled
+  C:\Users\liusu\AppData\Roaming\Python\Python313\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <function BaseSubprocessTransport.__del__ at 0x000001B4E4B05800>
+  
+  Traceback (most recent call last):
+    File "asyncio\base_subprocess.py", line 135, in __del__
+    File "asyncio\base_subprocess.py", line 74, in __repr__
+    File "asyncio\proactor_events.py", line 80, in __repr__
+    File "asyncio\windows_utils.py", line 102, in fileno
+  ValueError: I/O operation on closed pipe
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2026 passed, 3 warnings in 169.66s (0:02:49)
+
+STDERR:
+
+Return code: 0
