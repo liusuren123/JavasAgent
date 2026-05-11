@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from typing import Any
 
 import click
 from rich.console import Console
@@ -82,7 +83,7 @@ def _init_team_members(agent: BaseAgent, config: Any) -> None:
             except ValueError:
                 pass  # 已存在，跳过
 
-    asyncio.get_event_loop().run_until_complete(_add())
+    asyncio.run(_add())
 
 
 @click.group()
