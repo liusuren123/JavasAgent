@@ -26,6 +26,7 @@ _mock_windll = types.SimpleNamespace(
     user32=_mock_user32,
     kernel32=_mock_kernel32,
     psapi=_mock_psapi,
+    msvcrt=MagicMock(),  # ChromaDB/sqlite3 needs this
 )
 
 # 保存原始 windll（可能不存在于非 Windows 平台）
@@ -36,6 +37,7 @@ class _FakeWindll:
     user32 = _mock_user32
     kernel32 = _mock_kernel32
     psapi = _mock_psapi
+    msvcrt = MagicMock()  # ChromaDB/sqlite3 needs this
 
 
 # Patch ctypes.windll before importing

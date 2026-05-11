@@ -27,6 +27,7 @@ class _FakeWindll:
     user32 = _mock_user32
     kernel32 = _mock_kernel32
     psapi = _mock_psapi
+    msvcrt = MagicMock()  # ChromaDB/sqlite3 needs this
 
 
 import ctypes as _ctypes
