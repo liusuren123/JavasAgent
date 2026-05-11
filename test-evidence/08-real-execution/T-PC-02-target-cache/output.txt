@@ -1,0 +1,149 @@
+============================================================
+T-PC-02 实操测试：目标缓存存取
+============================================================
+
+--- 测试1：基本添加和按 ID 获取 ---
+  [PASS] 缓存大小为1 — size=1
+  [PASS] 按ID找到目标
+  [PASS] text一致 — text=打开文件
+  [PASS] bbox一致 — bbox=(100, 200, 120, 40)
+  [PASS] center一致 — center=(160, 220)
+  [PASS] element_type一致
+  [PASS] confidence一致
+  [PASS] screen_region非空
+  [PASS] 不存在的ID返回None
+
+--- 测试2：批量添加 ---
+  [PASS] 批量添加后大小为5 — size=5
+
+--- 测试3：按文字查找 ---
+  [PASS] 包含匹配'文件'找到2个 — 找到2个
+  [PASS] 精确匹配找到1个 — 找到1个
+  [PASS] 精确匹配内容正确
+  [PASS] 无匹配返回空列表
+
+--- 测试4：按类型查找 ---
+  [PASS] button类型找到2个 — 找到2个
+  [PASS] label类型找到1个
+  [PASS] 不存在类型返回空
+
+--- 测试5：按屏幕区域查找 ---
+  [PASS] 左上目标region=top_left — region=top_left
+  [PASS] 右下目标region=bottom_right — region=bottom_right
+  [PASS] 中心目标region=center — region=center
+  [PASS] top_left区域找到1个 — 找到1个
+  [PASS] center区域找到1个
+
+--- 测试6：按位置区域查找 ---
+  [PASS] bbox查询找到附近目标 — 找到1个
+  [PASS] 远处bbox查询无结果
+
+--- 测试7：最近目标查找 ---
+  [PASS] 最近目标是'近处' — nearest=近处
+  [PASS] 按类型找最近label — nearest=远处
+  [PASS] 不存在的类型返回None
+
+--- 测试8：TTL 过期淘汰 ---
+  [PASS] 添加后大小为2 — size=2
+  [PASS] 过期移除1个 — removed=1
+  [PASS] 移除后大小为1 — size=1
+  [PASS] 新目标仍在
+  [PASS] 旧目标已移除
+
+--- 测试9：实时等待 TTL 过期 ---
+  [PASS] 添加后大小为1
+  [PASS] 等待0.4s后过期移除1个 — removed=1
+  [PASS] 移除后大小为0
+
+--- 测试10：容量限制淘汰 ---
+  [PASS] 添加3个目标大小为3 — size=3
+  [PASS] 超容量后大小仍为3 — size=3
+  [PASS] 最旧目标被淘汰 — t1应该被淘汰
+  [PASS] 最新目标存在
+  [PASS] 最新目标text正确
+
+--- 测试11：容量淘汰顺序验证 ---
+  [PASS] 5个目标大小为5
+  [PASS] 淘汰后大小仍为5
+  [PASS] T0被淘汰
+  [PASS] T1被淘汰
+  [PASS] T2仍在
+  [PASS] T5存在
+  [PASS] T6存在
+
+--- 测试12：更新已有目标 ---
+  [PASS] 添加后大小为1
+  [PASS] 更新后大小仍为1 — size=1
+  [PASS] 更新后text变化
+  [PASS] 更新后bbox变化
+  [PASS] 更新后type变化
+  [PASS] 更新后confidence变化
+
+--- 测试13：清空缓存 ---
+  [PASS] 添加5个目标
+  [PASS] 清空后大小为0
+  [PASS] 清空后total=0
+  [PASS] 清空后hits=0
+
+--- 测试14：统计信息 ---
+  [PASS] 统计total=4 — total=4
+  [PASS] 统计button数量=2
+  [PASS] 统计hits=2 — hits=2
+  [PASS] 统计misses=1 — misses=1
+  [PASS] 命中率约0.667 — hit_rate=0.6666666666666666
+
+--- 测试15：屏幕区域判定 ---
+  [PASS] (100,100)->top_left — region=top_left
+  [PASS] (1800,100)->top_right — region=top_right
+  [PASS] (100,900)->bottom_left — region=bottom_left
+  [PASS] (1800,900)->bottom_right — region=bottom_right
+  [PASS] (960,540)->center — region=center
+
+--- 测试16：跨操作数据完整性 ---
+  [PASS] 6个目标全部添加 — size=6
+  [PASS] [确定] 能按ID找到
+  [PASS] [确定] text一致
+  [PASS] [确定] center一致 — expected=(550, 420), actual=(550, 420)
+  [PASS] [确定] bbox一致
+  [PASS] [确定] type一致
+  [PASS] [确定] confidence一致 — conf=0.95
+  [PASS] [确定] region非空
+  [PASS] [系统设置] 能按ID找到
+  [PASS] [系统设置] text一致
+  [PASS] [系统设置] center一致 — expected=(360, 67), actual=(360, 67)
+  [PASS] [系统设置] bbox一致
+  [PASS] [系统设置] type一致
+  [PASS] [系统设置] confidence一致 — conf=0.72
+  [PASS] [系统设置] region非空
+  [PASS] [欢迎使用] 能按ID找到
+  [PASS] [欢迎使用] text一致
+  [PASS] [欢迎使用] center一致 — expected=(1060, 125), actual=(1060, 125)
+  [PASS] [欢迎使用] bbox一致
+  [PASS] [欢迎使用] type一致
+  [PASS] [欢迎使用] confidence一致 — conf=0.99
+  [PASS] [欢迎使用] region非空
+  [PASS] [点击这里] 能按ID找到
+  [PASS] [点击这里] text一致
+  [PASS] [点击这里] center一致 — expected=(850, 615), actual=(850, 615)
+  [PASS] [点击这里] bbox一致
+  [PASS] [点击这里] type一致
+  [PASS] [点击这里] confidence一致 — conf=0.6
+  [PASS] [点击这里] region非空
+  [PASS] [齿轮图标] 能按ID找到
+  [PASS] [齿轮图标] text一致
+  [PASS] [齿轮图标] center一致 — expected=(65, 65), actual=(65, 65)
+  [PASS] [齿轮图标] bbox一致
+  [PASS] [齿轮图标] type一致
+  [PASS] [齿轮图标] confidence一致 — conf=0.45
+  [PASS] [齿轮图标] region非空
+  [PASS] [用户名] 能按ID找到
+  [PASS] [用户名] text一致
+  [PASS] [用户名] center一致 — expected=(440, 312), actual=(440, 312)
+  [PASS] [用户名] bbox一致
+  [PASS] [用户名] type一致
+  [PASS] [用户名] confidence一致 — conf=0.88
+  [PASS] [用户名] region非空
+
+============================================================
+测试结果: 110/110 PASSED, 0 FAILED
+============================================================
