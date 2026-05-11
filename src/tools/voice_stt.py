@@ -3,6 +3,7 @@
 支持多后端引擎：
   - Google Speech Recognition（免费在线，通过 speech_recognition 库）
   - Whisper（如果安装了 openai-whisper）
+  - faster-whisper（CTranslate2 加速，推荐离线方案）
 
 Usage::
 
@@ -19,7 +20,7 @@ import os
 import tempfile
 import wave
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncIterator
 
 from loguru import logger
 
@@ -30,6 +31,7 @@ from src.utils.path_safety import safe_resolve_path
 # ---------------------------------------------------------------------------
 _SR_AVAILABLE: bool = False
 _WHISPER_AVAILABLE: bool = False
+_FASTER_WHISPER_AVAILABLE: bool = False
 
 try:
     import speech_recognition as sr  # type: ignore[import-untyped]
@@ -45,6 +47,13 @@ try:
 except ImportError:
     _whisper_module = None  # type: ignore[assignment]
 
+try:
+    from faster_whisper import WhisperModel  # type: ignore[import-untyped]
+
+    _FASTER_WHISPER_AVAILABLE = True
+except ImportError:
+    WhisperModel = None  # type: ignore[assignment,misc]
+
 # 默认工作空间
 _WORKSPACE = Path(os.environ.get("JAVASAGENT_WORKSPACE", ".")).resolve()
 
@@ -58,19 +67,32 @@ class VoiceSTT:
     """STT 语音识别工具。
 
     使用 speech_recognition 库作为后端，支持 Google SR（免费在线）和
-    Whisper（如果安装了 openai-whisper）。
+    Whisper（如果安装了 openai-whisper）和 faster-whisper（CTranslate2 加速）。
     所有同步操作通过 asyncio.to_thread 执行，不阻塞事件循环。
     """
 
-    def __init__(self) -> None:
-        """初始化 STT。"""
+    def __init__(self, faster_whisper_model: str = "base") -> None:
+        """初始化 STT。
+
+        Args:
+            faster_whisper_model: faster-whisper 模型名称（如 base, small, medium）
+        """
         self._recognizer: Any = None
+        self._fw_model: Any = None
+        self._fw_model_name = faster_whisper_model
         if _SR_AVAILABLE:
             try:
                 self._recognizer = sr.Recognizer()
                 logger.debug("speech_recognition Recognizer 初始化成功")
             except Exception as e:
                 logger.error(f"speech_recognition 初始化失败: {e}")
+        if _FASTER_WHISPER_AVAILABLE and WhisperModel is not None:
+            try:
+                self._fw_model = WhisperModel(faster_whisper_model, compute_type="int8")
+                logger.debug(f"faster-whisper 模型 '{faster_whisper_model}' 加载成功")
+            except Exception as e:
+                logger.warning(f"faster-whisper 加载失败: {e}")
+                self._fw_model = None
 
     # ------------------------------------------------------------------
     # 公共方法
@@ -173,6 +195,10 @@ class VoiceSTT:
         if suffix not in {".wav", ".mp3", ".flac", ".aiff", ".ogg"}:
             return {"error": f"不支持的音频格式: {suffix}"}
 
+        # 优先使用 faster-whisper（支持更多格式，速度快）
+        if _FASTER_WHISPER_AVAILABLE and self._fw_model is not None:
+            return await self._recognize_with_faster_whisper(str(safe_path), language)
+
         def _recognize_sync() -> dict[str, Any]:
             try:
                 if suffix == ".wav":
@@ -255,11 +281,155 @@ class VoiceSTT:
                 "description": "OpenAI Whisper（本地离线模型）",
             })
 
+        if _FASTER_WHISPER_AVAILABLE:
+            engines.append({
+                "name": "faster-whisper",
+                "type": "offline",
+                "description": "CTranslate2 加速的 Whisper（推荐离线方案）",
+            })
+
         return {
             "status": "ok",
             "engines": engines,
             "speech_recognition_available": _SR_AVAILABLE,
             "whisper_available": _WHISPER_AVAILABLE,
+            "faster_whisper_available": _FASTER_WHISPER_AVAILABLE,
+        }
+
+    # ------------------------------------------------------------------
+    # faster-whisper 后端
+    # ------------------------------------------------------------------
+
+    async def _recognize_with_faster_whisper(
+        self, file_path: str, language: str = "zh-CN"
+    ) -> dict[str, Any]:
+        """使用 faster-whisper 识别音频文件。
+
+        Args:
+            file_path: 音频文件路径
+            language: 语言代码（如 "zh-CN"）
+
+        Returns:
+            识别结果字典
+        """
+        if not _FASTER_WHISPER_AVAILABLE or self._fw_model is None:
+            return {"error": "faster-whisper 不可用"}
+
+        def _transcribe() -> dict[str, Any]:
+            try:
+                lang = language.split("-")[0] if language else None
+                segments, info = self._fw_model.transcribe(
+                    file_path,
+                    language=lang,
+                    beam_size=5,
+                )
+                text_parts: list[str] = []
+                for seg in segments:
+                    text_parts.append(seg.text.strip())
+                text = " ".join(text_parts).strip()
+                if not text:
+                    return {
+                        "status": "no_result",
+                        "text": "",
+                        "message": "faster-whisper 未识别到内容",
+                        "engine": "faster-whisper",
+                    }
+                return {
+                    "status": "recognized",
+                    "text": text,
+                    "engine": "faster-whisper",
+                    "confidence": None,
+                    "path": file_path,
+                }
+            except Exception as e:
+                logger.error(f"faster-whisper 识别失败: {e}")
+                return {"error": f"faster-whisper 识别失败: {e}"}
+
+        return await asyncio.to_thread(_transcribe)
+
+    async def listen_with_vad(
+        self,
+        audio_stream: AsyncIterator[bytes],
+        vad: Any,
+        timeout: float = 30.0,
+    ) -> dict[str, Any]:
+        """VAD 驱动的 STT：自动检测说话开始/结束，然后识别。
+
+        从音频流中读取数据，使用 VAD 检测语音活动：
+        1. 等待 VAD 检测到说话开始
+        2. 持续收集音频直到 VAD 检测到静音
+        3. 将收集到的音频交给 STT 引擎识别
+
+        Args:
+            audio_stream: 异步音频数据流（yield bytes，通常为 16kHz 16bit PCM）
+            vad: VAD 检测器实例（需实现 is_speech(audio_bytes) -> bool）
+            timeout: 最大等待时间（秒）
+
+        Returns:
+            识别结果字典
+        """
+        audio_chunks: list[bytes] = []
+        speaking = False
+        silence_start: float | None = None
+        silence_timeout = 1.5  # 静音多久后认为说完了
+
+        try:
+            async for chunk in audio_stream:
+                if not chunk:
+                    continue
+
+                is_speech = False
+                if vad and hasattr(vad, "is_speech"):
+                    try:
+                        is_speech = vad.is_speech(chunk)
+                    except Exception:
+                        is_speech = False
+
+                if is_speech:
+                    audio_chunks.append(chunk)
+                    speaking = True
+                    silence_start = None
+                elif speaking:
+                    # 说话中的短暂停顿
+                    audio_chunks.append(chunk)
+                    if silence_start is None:
+                        import time
+                        silence_start = time.monotonic()
+                    elif (time.monotonic() - silence_start) > silence_timeout:
+                        # 静音超时，认为说话结束
+                        break
+        except asyncio.TimeoutError:
+            return {
+                "status": "timeout",
+                "text": "",
+                "message": f"VAD 等待超时 ({timeout}s)",
+            }
+        except Exception as e:
+            return {"error": f"VAD 音频流读取失败: {e}"}
+
+        if not audio_chunks:
+            return {
+                "status": "no_speech",
+                "text": "",
+                "message": "未检测到语音活动",
+            }
+
+        # 将音频块合并为 WAV
+        wav_bytes = self._chunks_to_wav(audio_chunks)
+
+        if not wav_bytes:
+            return {"error": "音频编码失败"}
+
+        # 优先 faster-whisper → whisper → 空结果
+        if _FASTER_WHISPER_AVAILABLE and self._fw_model is not None:
+            return await self._recognize_wav_with_faster_whisper(wav_bytes)
+        if _WHISPER_AVAILABLE and _whisper_module is not None:
+            return await self._recognize_wav_with_whisper(wav_bytes)
+
+        return {
+            "status": "no_result",
+            "text": "",
+            "message": "无可用的离线 STT 引擎",
         }
 
     # ------------------------------------------------------------------
@@ -319,3 +489,103 @@ class VoiceSTT:
         except Exception as e:
             logger.error(f"Whisper 文件识别失败: {e}")
             return {"error": f"Whisper 文件识别失败: {e}"}
+
+    # ------------------------------------------------------------------
+    # WAV 辅助方法
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _chunks_to_wav(chunks: list[bytes], sample_rate: int = 16000, sample_width: int = 2) -> bytes:
+        """将原始 PCM 音频块合并为 WAV 格式字节。
+
+        Args:
+            chunks: 原始 PCM 音频数据块列表（16bit LE, mono）
+            sample_rate: 采样率（默认 16000）
+            sample_width: 采样位深（默认 2 = 16bit）
+
+        Returns:
+            完整的 WAV 格式字节数据
+        """
+        if not chunks:
+            return b""
+        raw_audio = b"".join(chunks)
+        n_channels = 1
+        buf = tempfile.SpooledTemporaryFile(max_size=10 * 1024 * 1024)
+        with wave.open(buf, "wb") as wf:
+            wf.setnchannels(n_channels)
+            wf.setsampwidth(sample_width)
+            wf.setframerate(sample_rate)
+            wf.writeframes(raw_audio)
+        buf.seek(0)
+        wav_data = buf.read()
+        buf.close()
+        return wav_data
+
+    async def _recognize_wav_with_faster_whisper(self, wav_bytes: bytes) -> dict[str, Any]:
+        """使用 faster-whisper 识别 WAV 字节。"""
+        if not _FASTER_WHISPER_AVAILABLE or self._fw_model is None:
+            return {"error": "faster-whisper 不可用"}
+
+        def _do() -> dict[str, Any]:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                f.write(wav_bytes)
+                tmp_path = f.name
+            try:
+                segments, info = self._fw_model.transcribe(tmp_path, beam_size=5)
+                text = " ".join(seg.text.strip() for seg in segments).strip()
+                if not text:
+                    return {
+                        "status": "no_result",
+                        "text": "",
+                        "engine": "faster-whisper",
+                    }
+                return {
+                    "status": "recognized",
+                    "text": text,
+                    "engine": "faster-whisper",
+                    "confidence": None,
+                }
+            except Exception as e:
+                return {"error": f"faster-whisper 识别失败: {e}"}
+            finally:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+
+        return await asyncio.to_thread(_do)
+
+    async def _recognize_wav_with_whisper(self, wav_bytes: bytes) -> dict[str, Any]:
+        """使用 openai-whisper 识别 WAV 字节。"""
+        if not _WHISPER_AVAILABLE or _whisper_module is None:
+            return {"error": "Whisper 不可用"}
+
+        def _do() -> dict[str, Any]:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                f.write(wav_bytes)
+                tmp_path = f.name
+            try:
+                model = _whisper_module.load_model("base")
+                result = model.transcribe(tmp_path)
+                text = result.get("text", "").strip()
+                if not text:
+                    return {
+                        "status": "no_result",
+                        "text": "",
+                        "engine": "whisper",
+                    }
+                return {
+                    "status": "recognized",
+                    "text": text,
+                    "engine": "whisper",
+                    "confidence": None,
+                }
+            except Exception as e:
+                return {"error": f"Whisper 识别失败: {e}"}
+            finally:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+
+        return await asyncio.to_thread(_do)
