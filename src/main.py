@@ -16,7 +16,6 @@ from rich.prompt import Prompt
 from rich.table import Table
 
 from src.agents.base_agent import BaseAgent
-from src.core.voice_chat import VoiceChatConfig, VoiceChatLoop
 from src.platforms import create_platform_adapter
 from src.tools.registry import ToolRegistry
 from src.tools.voice_ops import VoiceOps
@@ -134,10 +133,44 @@ def chat() -> None:
 
 
 @cli.command()
-@click.option("--wake-word", "-w", default="", help="唤醒词（空则不需要唤醒词）")
+@click.option("--no-wake", is_flag=True, default=False, help="免唤醒直接对话模式")
+@click.option("--continuous", is_flag=True, default=False, help="唤醒后持续对话")
+@click.option("--keyword", "-k", default="", help="指定唤醒词")
+@click.option("--list-keywords", is_flag=True, default=False, help="列出可用唤醒词")
+@click.option("--wake-word", "-w", default="", help="唤醒词（空则不需要唤醒词）", hidden=True)
 @click.option("--tts-rate", "-r", default=0, type=int, help="TTS 语速 (-10~10)")
-def voice(wake_word: str, tts_rate: int) -> None:
-    """启动语音对话模式。"""
+def voice(
+    no_wake: bool,
+    continuous: bool,
+    keyword: str,
+    list_keywords: bool,
+    wake_word: str,
+    tts_rate: int,
+) -> None:
+    """启动语音对话模式。
+
+    \b
+    javas voice                    启动语音模式（需唤醒词）
+    javas voice --no-wake          免唤醒直接对话模式
+    javas voice --continuous       唤醒后持续对话
+    javas voice --keyword 贾维斯   指定唤醒词
+    javas voice --list-keywords    列出可用唤醒词
+    """
+    config = load_config()
+
+    # --list-keywords：列出可用唤醒词后退出
+    if list_keywords:
+        keywords = config.voice.wake_word.keywords
+        console.print(
+            Panel(
+                "可用唤醒词：\n"
+                + "\n".join(f"  • {kw}" for kw in keywords),
+                title="🔑 唤醒词列表",
+                border_style="cyan",
+            )
+        )
+        return
+
     console.print(
         Panel(
             "[bold cyan]JavasAgent[/bold cyan] v0.1.0 — 语音模式\n"
@@ -150,38 +183,55 @@ def voice(wake_word: str, tts_rate: int) -> None:
 
     agent = create_agent()
     voice_ops = VoiceOps()
-    chat_config = VoiceChatConfig(
-        wake_word=wake_word,
-        tts_rate=tts_rate,
+
+    # 构建管道配置
+    from src.voice.pipeline import VoicePipeline, VoicePipelineConfig
+
+    wake_word_enabled = not no_wake
+    effective_keyword = keyword or wake_word or ""
+    effective_keywords = [effective_keyword] if effective_keyword else config.voice.wake_word.keywords
+
+    pipeline_config = VoicePipelineConfig(
+        wake_words=effective_keywords,
+        wake_word_enabled=wake_word_enabled,
+        continuous_mode=continuous or config.voice.pipeline.continuous_mode,
+        continuous_timeout=config.voice.pipeline.continuous_timeout,
+        interruption_enabled=config.voice.pipeline.interruption_enabled,
+        stt_engine=config.voice.stt.engine,
+        tts_engine=config.voice.tts.engine,
+        greeting=config.voice.pipeline.greeting,
+        farewell=config.voice.pipeline.farewell,
+        vad_threshold=config.voice.vad.threshold,
+        silence_timeout=config.voice.vad.silence_timeout,
     )
+
+    pipeline = VoicePipeline(agent, voice_ops, pipeline_config)
 
     # 状态映射表
     state_labels = {
         "listening": "[bold yellow]🎤 正在听...[/bold yellow]",
-        "thinking": "[bold magenta]🧠 思考中...[/bold magenta]",
+        "processing": "[bold magenta]🧠 思考中...[/bold magenta]",
         "speaking": "[bold green]🔊 回复中...[/bold green]",
         "idle": "[dim]等待中...[/dim]",
-        "error": "[bold red]⚠️ 出错了，正在恢复...[/bold red]",
     }
 
-    def on_state_change(state: str) -> None:
+    def on_state_change(state: Any) -> None:
         """打印当前状态提示。"""
-        label = state_labels.get(state, state)
+        label = state_labels.get(state.value if hasattr(state, "value") else state, str(state))
         console.print(f"\r{label}", end="")
 
-    voice_loop = VoiceChatLoop(agent, voice_ops, chat_config)
-    voice_loop.set_state_callback(on_state_change)
+    pipeline.set_state_callback(on_state_change)
 
     async def _voice_chat_loop() -> None:
         async with agent:
             await agent.initialize_memory()
             try:
-                await voice_loop.start()
+                await pipeline.start()
             except KeyboardInterrupt:
                 pass
             finally:
-                if voice_loop.is_running:
-                    await voice_loop.stop()
+                if pipeline.is_running:
+                    await pipeline.stop()
                 console.print("\n[dim]语音模式已退出。[/dim]")
 
     try:

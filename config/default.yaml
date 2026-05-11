@@ -127,3 +127,28 @@ tools:
     retry_delay: 1.0
     download_workspace: "."
     # proxy: "http://proxy:8080"
+
+# 语音助手配置
+voice:
+  wake_word:
+    enabled: true
+    keywords: ["porcupine"]
+    sensitivity: 0.5
+  vad:
+    engine: "silero"
+    threshold: 0.5
+    silence_timeout: 1.5
+  stt:
+    engine: "auto"
+    language: "zh-CN"
+  tts:
+    engine: "auto"
+    voice: ""
+    rate: 200
+    volume: 1.0
+  pipeline:
+    continuous_mode: false
+    continuous_timeout: 30.0
+    interruption_enabled: true
+    greeting: "我在，请说。"
+    farewell: "再见。"

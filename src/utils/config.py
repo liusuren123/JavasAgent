@@ -136,6 +136,58 @@ class TeamConfig(BaseModel):
     """最大工作 Agent 数量。"""
 
 
+class WakeWordConfig(BaseModel):
+    """唤醒词配置。"""
+
+    enabled: bool = True
+    keywords: list[str] = Field(default_factory=lambda: ["porcupine"])
+    sensitivity: float = 0.5
+
+
+class VADConfig(BaseModel):
+    """VAD（语音活动检测）配置。"""
+
+    engine: str = "silero"
+    threshold: float = 0.5
+    silence_timeout: float = 1.5
+
+
+class STTConfig(BaseModel):
+    """STT（语音识别）配置。"""
+
+    engine: str = "auto"
+    language: str = "zh-CN"
+
+
+class TTSConfig(BaseModel):
+    """TTS（语音合成）配置。"""
+
+    engine: str = "auto"
+    voice: str = ""
+    rate: int = 200
+    volume: float = 1.0
+
+
+class VoicePipelineConfigModel(BaseModel):
+    """语音管道配置。"""
+
+    continuous_mode: bool = False
+    continuous_timeout: float = 30.0
+    interruption_enabled: bool = True
+    greeting: str = "我在，请说。"
+    farewell: str = "再见。"
+
+
+class VoiceConfig(BaseModel):
+    """语音助手配置。"""
+
+    wake_word: WakeWordConfig = Field(default_factory=WakeWordConfig)
+    vad: VADConfig = Field(default_factory=VADConfig)
+    stt: STTConfig = Field(default_factory=STTConfig)
+    tts: TTSConfig = Field(default_factory=TTSConfig)
+    pipeline: VoicePipelineConfigModel = Field(default_factory=VoicePipelineConfigModel)
+
+
 class AppConfig(BaseModel):
     """应用全局配置。"""
 
@@ -146,6 +198,7 @@ class AppConfig(BaseModel):
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     perception: PerceptionConfig = Field(default_factory=PerceptionConfig)
     team: TeamConfig = Field(default_factory=TeamConfig)
+    voice: VoiceConfig = Field(default_factory=VoiceConfig)
 
 
 def load_config(config_path: str | Path | None = None) -> AppConfig:
