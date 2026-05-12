@@ -25,9 +25,15 @@ class SkillDefinition:
     parameters: dict[str, Any] = field(default_factory=dict)
     examples: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
-    source: str = "manual"  # "manual" | "auto_learned" | "tool_registry"
+    source: str = "manual"  # "manual" | "auto_learned" | "tool_registry" | "yaml"
     pattern_steps: list[str] = field(default_factory=list)  # 学习到的步骤序列
     metadata: dict[str, Any] = field(default_factory=dict)
+    # YAML 技能扩展字段
+    yaml_path: str = ""  # YAML 文件路径（非空表示 YAML 技能）
+    skill_version: str = "1.0"  # 技能版本
+    triggers: list[str] = field(default_factory=list)  # 触发关键词列表
+    requirements: list[dict[str, Any]] = field(default_factory=list)  # 前置条件列表
+    steps: list[dict[str, Any]] = field(default_factory=list)  # YAML 执行步骤（仅 YAML 技能）
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 
