@@ -29,6 +29,7 @@ dependencies = [
     "psutil>=5.9",
     "winotify>=1.1; sys_platform == 'win32'",
     "pystray>=0.19",
+    "keyboard>=0.13",
 ]
 
 [project.optional-dependencies]
