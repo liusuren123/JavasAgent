@@ -1,0 +1,35 @@
+name: "终端执行命令"
+description: "在 VS Code 终端中执行指定命令"
+category: "dev"
+version: "1.0"
+triggers:
+  - "运行命令"
+  - "执行命令"
+  - "终端运行"
+  - "跑一下"
+
+parameters:
+  command:
+    type: string
+    description: "要执行的命令"
+    required: true
+
+steps:
+  - action: key_combo
+    keys: "ctrl+`"
+    comment: "打开 VS Code 终端"
+
+  - action: wait
+    duration: 0.3
+
+  - action: type_text
+    text: "{{parameters.command}}"
+    speed: "fast"
+    comment: "输入命令"
+
+  - action: key_combo
+    keys: "enter"
+    comment: "执行命令"
+
+  - action: wait
+    duration: 1.0

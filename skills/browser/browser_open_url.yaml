@@ -1,0 +1,35 @@
+name: "浏览器打开网页"
+description: "在浏览器中打开指定 URL"
+category: "browser"
+version: "1.0"
+triggers:
+  - "打开网页"
+  - "打开网址"
+  - "访问网站"
+
+parameters:
+  url:
+    type: string
+    description: "要打开的 URL"
+    required: true
+
+steps:
+  - action: key_combo
+    keys: "ctrl+l"
+    comment: "聚焦地址栏"
+
+  - action: wait
+    duration: 0.2
+
+  - action: key_combo
+    keys: "ctrl+a"
+    comment: "全选地址栏内容"
+
+  - action: type_text
+    text: "{{parameters.url}}"
+    speed: "fast"
+    comment: "输入 URL"
+
+  - action: key_combo
+    keys: "enter"
+    comment: "打开网页"

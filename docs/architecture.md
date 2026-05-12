@@ -317,3 +317,130 @@ JavasAgent/
 ```
 
 **约束：** 每个文件不超过 20KB，超过则拆分。
+
+---
+
+## 11. 技能描述执行系统
+
+YAML 技能系统是 JavasAgent 的核心能力扩展机制，允许以声明式方式定义可复用的操作序列。
+
+### 11.1 组件关系
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                     技能描述执行系统                           │
+│                                                              │
+│  ┌────────────┐   加载    ┌─────────────┐   注册   ┌──────┐ │
+│  │  YAML 文件  │ ───────→ │ SkillLoader │ ──────→ │ 技能  │ │
+│  │ skills/**  │          │  加载器      │         │ 注册表│ │
+│  └────────────┘          └─────────────┘         └──────┘ │
+│                                  │                           │
+│                          验证通过后                           │
+│                                  ▼                           │
+│  ┌────────────┐   调用    ┌─────────────┐                   │
+│  │  用户指令   │ ───────→ │ StepExecutor│ ──→ 执行步骤链    │
+│  │  匹配触发词 │          │  步骤执行器  │                   │
+│  └────────────┘          └─────────────┘                   │
+│                                  │                           │
+│                    ┌─────────────┼─────────────┐            │
+│                    ▼             ▼             ▼            │
+│            ┌──────────┐  ┌──────────┐  ┌──────────┐        │
+│            │ keyboard │  │  mouse   │  │  screen  │        │
+│            │ 键盘动作  │  │ 鼠标动作  │  │ 屏幕动作  │       │
+│            └──────────┘  └──────────┘  └──────────┘        │
+│                    │             │             │            │
+│                    ▼             ▼             ▼            │
+│            ┌──────────┐  ┌──────────┐  ┌──────────┐        │
+│            │  text    │  │  vision  │  │ control  │        │
+│            │ 文本动作  │  │ 视觉动作  │  │ 流程控制  │        │
+│            └──────────┘  └──────────┘  └──────────┘        │
+│                                                              │
+│  ┌────────────┐          ┌─────────────┐                    │
+│  │SkillContext│ ←────── │ SkillValidator│                   │
+│  │ 执行上下文  │  传递    │  技能验证器   │                   │
+│  └────────────┘          └─────────────┘                    │
+│       │                                                      │
+│       ├── parameters  用户传入参数（只读）                     │
+│       ├── variables   步骤中间变量（可读写）                   │
+│       ├── result      最终执行结果                            │
+│       └── resolve()   模板变量 {{xxx}} 替换                   │
+│                                                              │
+│  ┌────────────────────┐                                     │
+│  │ ExpressionEvaluator│  条件表达式求值（不使用 eval）        │
+│  │ 表达式求值器        │  支持 ==, !=, >, <, and, or, not    │
+│  └────────────────────┘                                     │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 11.2 数据流
+
+```
+用户指令（如 "word 保存 pdf"）
+    │
+    ▼
+SkillLoader.load_all()  ──── 扫描 skills/**/*.yaml
+    │                         ├─ system/ (4 个技能)
+    │                         ├─ office/  (3 个技能)
+    │                         ├─ browser/ (3 个技能)
+    │                         └─ dev/     (3 个技能)
+    ▼
+SkillValidator.validate() ── 验证 YAML 格式、action 合法性
+    │
+    ▼
+SkillDefinition ──────────── 转换为内存中的技能定义对象
+    │
+    ▼
+StepExecutor.execute_steps() ── 按顺序执行步骤链
+    │
+    ├── Step 1: key_combo(keys="f12")
+    │       │
+    │       ▼  SkillContext.resolve()  ── 替换 {{parameters.xxx}}
+    │       ▼  ACTION_REGISTRY["key_combo"]  ── 查找注册函数
+    │       ▼  exec_key_combo(step, context, platform)  ── 调用
+    │
+    ├── Step 2: wait_text(text="另存为")
+    │       ...
+    │
+    ├── Step N: condition(when="parameters.filename != ''")
+    │       │
+    │       ▼  ExpressionEvaluator.evaluate()  ── 安全求值
+    │       ▼  如果为 True → 执行 then 子步骤
+    │
+    ▼
+ExecutionResult ──────────── {success, completed_steps, total_steps}
+```
+
+### 11.3 技能目录结构
+
+```
+skills/
+├── readme.md                          # 技能库说明
+├── system/                            # 系统级技能
+│   ├── open_app.yaml                  # 打开应用程序
+│   ├── screenshot.yaml                # 全屏截图
+│   ├── screenshot_region.yaml         # 区域截图
+│   └── switch_window.yaml             # 切换窗口
+├── office/                            # 办公自动化技能
+│   ├── word_save_pdf.yaml             # Word 转 PDF
+│   ├── excel_format_table.yaml        # Excel 格式化表格
+│   └── ppt_export_images.yaml         # PPT 导出图片
+├── browser/                           # 浏览器技能
+│   ├── browser_open_url.yaml          # 打开网页
+│   ├── browser_bookmark.yaml          # 添加书签
+│   └── browser_download.yaml          # 下载文件
+└── dev/                               # 开发工具技能
+    ├── vscode_open_project.yaml       # VS Code 打开项目
+    ├── git_commit_push.yaml           # Git 提交推送
+    └── terminal_run.yaml              # 终端执行命令
+```
+
+### 11.4 核心模块
+
+| 模块 | 文件 | 职责 |
+|------|------|------|
+| **SkillLoader** | `src/skills/skill_loader.py` | 扫描目录，加载 YAML 文件，转换为 SkillDefinition |
+| **SkillValidator** | `src/skills/validator.py` | 验证 YAML 格式、字段完整性、action 合法性 |
+| **StepExecutor** | `src/skills/step_executor.py` | 顺序执行步骤链，查找 ACTION_REGISTRY |
+| **SkillContext** | `src/skills/context.py` | 步骤间传递参数和变量，模板变量替换 |
+| **ExpressionEvaluator** | `src/skills/expression.py` | 安全条件表达式求值（递归下降解析器） |
+| **Actions** | `src/skills/actions/` | 20 个原语 action 的实现（6 个子模块） |

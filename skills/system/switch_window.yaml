@@ -1,0 +1,23 @@
+name: "切换窗口"
+description: "通过 Alt+Tab 切换到目标窗口"
+category: "system"
+version: "1.0"
+triggers:
+  - "切换窗口"
+  - "切换应用"
+  - "alt tab"
+
+parameters:
+  target_title:
+    type: string
+    description: "目标窗口标题（可选）"
+    default: ""
+    required: false
+
+steps:
+  - action: key_combo
+    keys: "alt+tab"
+    comment: "切换窗口"
+
+  - action: wait
+    duration: 0.3

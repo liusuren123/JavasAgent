@@ -1,0 +1,55 @@
+name: "Git 提交推送"
+description: "在 VS Code 中执行 Git 提交并推送到远程仓库"
+category: "dev"
+version: "1.0"
+triggers:
+  - "git 提交"
+  - "提交代码"
+  - "推送代码"
+  - "commit"
+  - "提交推送"
+
+parameters:
+  message:
+    type: string
+    description: "提交信息"
+    required: true
+
+steps:
+  - action: key_combo
+    keys: "ctrl+shift+g"
+    comment: "打开 VS Code 源代码管理面板"
+
+  - action: wait
+    duration: 0.5
+
+  - action: type_text
+    text: "{{parameters.message}}"
+    speed: "fast"
+    comment: "输入提交信息"
+
+  - action: key_combo
+    keys: "ctrl+enter"
+    comment: "执行提交"
+
+  - action: wait
+    duration: 1.0
+
+  - action: key_combo
+    keys: "ctrl+shift+p"
+    comment: "打开命令面板"
+
+  - action: wait
+    duration: 0.3
+
+  - action: type_text
+    text: "Git: Push"
+    speed: "fast"
+    comment: "输入推送命令"
+
+  - action: key_combo
+    keys: "enter"
+    comment: "执行推送"
+
+  - action: wait
+    duration: 2.0

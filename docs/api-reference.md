@@ -299,3 +299,189 @@ class VisionEye:
 | `tools.*` | `enabled` | 各工具启用/禁用 |
 | `voice` | `wake_word`, `vad`, `stt`, `tts`, `pipeline` | 语音模块配置 |
 | `email` | `smtp_host`, `imap_host`, `address`, `password` | 邮件配置 |
+
+---
+
+## 技能系统 API
+
+技能系统位于 `src/skills/`，负责加载、验证和执行 YAML 定义的声明式技能。
+
+### SkillLoader
+
+位于 `src/skills/skill_loader.py`，扫描目录并加载 YAML 技能文件。
+
+```python
+class SkillLoader:
+    def __init__(self, skills_dirs: list[str] | None = None) -> None
+    def load_all(self) -> list[SkillDefinition]
+    def load_file(self, path: Path) -> SkillDefinition | None
+    def reload(self) -> list[SkillDefinition]
+    def get_skill_path(self, skill_name: str) -> Path | None
+```
+
+| 方法 | 说明 |
+|------|------|
+| `__init__(skills_dirs)` | 初始化加载器，`skills_dirs` 默认 `["./skills", "./data/skills"]` |
+| `load_all()` | 扫描所有目录的 `*.yaml` 文件，验证后返回 `SkillDefinition` 列表 |
+| `load_file(path)` | 加载单个 YAML 文件，验证失败返回 `None` |
+| `reload()` | 清空缓存后重新加载所有技能 |
+| `get_skill_path(skill_name)` | 根据技能名称查找对应文件路径 |
+
+**加载流程：** 读取 YAML → `SkillValidator.validate()` → 转换为 `SkillDefinition` → 缓存。
+
+### StepExecutor
+
+位于 `src/skills/step_executor.py`，顺序执行步骤链的核心调度器。
+
+```python
+class StepExecutor:
+    def __init__(
+        self,
+        platform: Any = None,
+        perception: Any = None,
+        humanhand: Any = None,
+        skill_executor: Any = None,
+    ) -> None
+    async def execute_step(self, step: dict[str, Any], context: SkillContext) -> dict[str, Any]
+    async def execute_steps(self, steps: list[dict[str, Any]], context: SkillContext) -> dict[str, Any]
+    def _resolve_params(self, step: dict[str, Any], context: SkillContext) -> dict[str, Any]
+```
+
+| 方法 | 说明 |
+|------|------|
+| `__init__(platform, perception, humanhand, skill_executor)` | 初始化执行器，注入平台和感知依赖 |
+| `execute_step(step, context)` | 执行单个步骤：查 ACTION_REGISTRY → 模板替换 → 调用 action 函数 |
+| `execute_steps(steps, context)` | 顺序执行步骤列表，某步失败时中断 |
+| `_resolve_params(step, context)` | 对步骤中所有字符串值做 `{{xxx}}` 模板变量替换 |
+
+**执行结果格式：**
+
+```python
+# 成功
+{"success": True, "completed_steps": 5, "total_steps": 5}
+
+# 失败
+{"success": False, "completed_steps": 2, "total_steps": 5,
+ "failed_step": 2, "failed_action": "click_text", "error": "未找到目标文字"}
+```
+
+### SkillContext
+
+位于 `src/skills/context.py`，步骤间传递参数和变量的上下文对象。
+
+```python
+@dataclass
+class SkillContext:
+    parameters: dict[str, Any]        # 用户传入参数（只读）
+    variables: dict[str, Any]         # 步骤中间变量（可读写）
+    result: dict[str, Any]            # 最终执行结果
+    screenshots: list[bytes]          # 执行过程截图列表
+    current_step: int                 # 当前步骤索引（从 0 开始）
+    total_steps: int                  # 总步骤数
+
+    def get(self, key: str, default: Any = None) -> Any
+    def set(self, key: str, value: Any) -> None
+    def resolve(self, template: Any) -> Any
+    def to_dict(self) -> dict[str, Any]
+```
+
+| 方法 | 说明 |
+|------|------|
+| `get(key, default)` | 获取变量值，支持点号路径（`parameters.xxx`, `variables.xxx`） |
+| `set(key, value)` | 设置中间变量（支持点号路径设置嵌套值） |
+| `resolve(template)` | 替换字符串中的 `{{key}}` 占位符为上下文实际值 |
+| `to_dict()` | 序列化为字典（screenshots 转为长度列表） |
+
+**变量查找优先级：** 纯键名 → `variables` → `parameters`。
+
+**模板变量示例：**
+
+```python
+ctx = SkillContext(parameters={"filename": "report"})
+ctx.resolve("{{parameters.filename}}.pdf")  # → "report.pdf"
+```
+
+### SkillValidator
+
+位于 `src/skills/validator.py`，验证 YAML 技能定义的格式和合法性。
+
+```python
+class SkillValidator:
+    def validate(self, data: dict[str, Any]) -> ValidationResult
+    def validate_file(self, path: Path) -> ValidationResult
+```
+
+| 方法 | 说明 |
+|------|------|
+| `validate(data)` | 验证技能字典：必填字段、steps 格式、action 合法性 |
+| `validate_file(path)` | 加载 YAML 文件并验证 |
+
+**ValidationResult：**
+
+```python
+@dataclass
+class ValidationResult:
+    valid: bool                    # 是否通过验证
+    errors: list[str]              # 错误列表（阻止加载）
+    warnings: list[str]            # 警告列表（可加载但不建议）
+```
+
+**验证规则：**
+- `name`、`description`、`steps` 为必填字段
+- `steps` 必须是列表
+- 每个 step 必须有合法的 `action`（20 个合法 action 之一）
+- `loop` 必须有 `max_iterations` 且 ≤ 100
+- `condition` 必须有 `when` 字段
+- 参数 `type` 必须是合法 JSON Schema 类型
+
+### ExpressionEvaluator
+
+位于 `src/skills/expression.py`，安全条件表达式求值器。
+
+```python
+class ExpressionEvaluator:
+    def evaluate(self, expr: str, context: Any) -> bool
+```
+
+| 方法 | 说明 |
+|------|------|
+| `evaluate(expr, context)` | 求值条件表达式，返回布尔结果。语法错误返回 `False` |
+
+**特性：**
+- 不使用 `eval()`，自实现 tokenizer + 递归下降解析器
+- 支持比较运算：`==`, `!=`, `>`, `<`, `>=`, `<=`
+- 支持逻辑运算：`and`, `or`, `not`
+- 支持字符串包含：`in`
+- 支持字面量：字符串、数字、布尔
+- 支持变量路径：`parameters.xxx`, `variables.xxx`
+
+### Actions 注册表
+
+位于 `src/skills/actions/__init__.py`，20 个原语 action 的统一注册表。
+
+```python
+def get_action_registry() -> dict[str, Callable]
+```
+
+| Action | 模块 | 说明 |
+|--------|------|------|
+| `key_combo` | `keyboard.py` | 组合键 |
+| `key_type` | `keyboard.py` | 单键输入 |
+| `click` | `mouse.py` | 点击坐标 |
+| `double_click` | `mouse.py` | 双击坐标 |
+| `right_click` | `mouse.py` | 右键点击 |
+| `drag` | `mouse.py` | 拖拽 |
+| `scroll` | `mouse.py` | 滚轮 |
+| `move_mouse` | `mouse.py` | 移动鼠标 |
+| `type_text` | `text.py` | 输入文字 |
+| `click_text` | `text.py` | 点击文字 |
+| `click_icon` | `vision.py` | 点击图标 |
+| `assert_text` | `vision.py` | 断言文字 |
+| `assert_screen` | `vision.py` | 断言屏幕 |
+| `screenshot` | `screen.py` | 截图 |
+| `wait` | `control.py` | 等待 |
+| `wait_text` | `control.py` | 等待文字 |
+| `condition` | `control.py` | 条件分支 |
+| `loop` | `control.py` | 循环 |
+| `run_skill` | `control.py` | 调用技能 |
+| `set_var` | `control.py` | 设置变量 |

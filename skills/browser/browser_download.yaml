@@ -1,0 +1,22 @@
+name: "浏览器下载文件"
+description: "保存当前页面或下载文件"
+category: "browser"
+version: "1.0"
+triggers:
+  - "下载文件"
+  - "保存网页"
+  - "下载页面"
+
+steps:
+  - action: key_combo
+    keys: "ctrl+s"
+    comment: "触发保存/下载"
+
+  - action: wait_text
+    text: "保存"
+    timeout: 3.0
+    comment: "等待保存对话框"
+
+  - action: key_combo
+    keys: "enter"
+    comment: "确认保存"

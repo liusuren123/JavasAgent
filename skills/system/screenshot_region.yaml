@@ -1,0 +1,34 @@
+name: "区域截图"
+description: "截取屏幕指定区域"
+category: "system"
+version: "1.0"
+triggers:
+  - "区域截图"
+  - "截取区域"
+
+parameters:
+  x:
+    type: integer
+    description: "起始 X 坐标"
+    default: 0
+  y:
+    type: integer
+    description: "起始 Y 坐标"
+    default: 0
+  width:
+    type: integer
+    description: "宽度"
+    default: 800
+  height:
+    type: integer
+    description: "高度"
+    default: 600
+
+steps:
+  - action: screenshot
+    region:
+      x: "{{parameters.x}}"
+      y: "{{parameters.y}}"
+      width: "{{parameters.width}}"
+      height: "{{parameters.height}}"
+    comment: "截取指定区域"

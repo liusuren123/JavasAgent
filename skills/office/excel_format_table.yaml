@@ -1,0 +1,28 @@
+name: "Excel 格式化表格"
+description: "在 Excel 中格式化当前表格"
+category: "office"
+version: "1.0"
+triggers:
+  - "excel 格式化"
+  - "格式化表格"
+  - "美化表格"
+
+steps:
+  - action: key_combo
+    keys: "ctrl+a"
+    comment: "全选表格"
+
+  - action: key_combo
+    keys: "ctrl+shift+l"
+    comment: "添加筛选"
+
+  - action: key_combo
+    keys: "alt+h"
+    comment: "打开开始菜单"
+
+  - action: wait
+    duration: 0.3
+
+  - action: key_combo
+    keys: "b"
+    comment: "加粗"

@@ -1,0 +1,43 @@
+name: "VS Code 打开项目"
+description: "在 VS Code 中打开指定项目路径"
+category: "dev"
+version: "1.0"
+triggers:
+  - "打开项目"
+  - "打开工程"
+  - "vscode 打开"
+  - "打开文件夹"
+
+parameters:
+  project_path:
+    type: string
+    description: "项目路径（绝对路径或相对路径）"
+    required: true
+
+steps:
+  - action: key_combo
+    keys: "ctrl+k ctrl+o"
+    comment: "打开 VS Code 的「打开文件夹」对话框"
+
+  - action: wait
+    duration: 0.5
+
+  - action: key_combo
+    keys: "ctrl+l"
+    comment: "聚焦文件路径输入框"
+
+  - action: type_text
+    text: "{{parameters.project_path}}"
+    speed: "fast"
+    comment: "输入项目路径"
+
+  - action: key_combo
+    keys: "enter"
+    comment: "确认打开项目"
+
+  - action: wait
+    duration: 1.0
+
+  - action: assert_text
+    text: "资源管理器|EXPLORER"
+    comment: "验证项目已打开"

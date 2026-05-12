@@ -1,0 +1,58 @@
+name: "Word 另存为 PDF"
+description: "在 Word 中将当前文档另存为 PDF 格式"
+category: "office"
+version: "1.0"
+triggers:
+  - "word 保存 pdf"
+  - "word 导出 pdf"
+  - "word 转 pdf"
+  - "另存为 pdf"
+
+parameters:
+  filename:
+    type: string
+    description: "保存的文件名（不含扩展名）"
+    default: ""
+    required: false
+
+steps:
+  - action: key_combo
+    keys: "f12"
+    comment: "打开另存为对话框"
+
+  - action: wait_text
+    text: "另存为"
+    timeout: 3.0
+    comment: "等待对话框出现"
+
+  - action: click_text
+    text: "文件类型"
+    offset_x: 50
+    comment: "点击文件类型下拉框"
+
+  - action: wait
+    duration: 0.3
+
+  - action: click_text
+    text: "PDF"
+    comment: "选择 PDF 格式"
+
+  - action: condition
+    when: "parameters.filename != ''"
+    then:
+      - action: key_combo
+        keys: "ctrl+a"
+      - action: type_text
+        text: "{{parameters.filename}}"
+        speed: "fast"
+
+  - action: key_combo
+    keys: "enter"
+    comment: "确认保存"
+
+  - action: wait
+    duration: 2.0
+
+  - action: assert_text
+    text: "保存成功|已完成|100%"
+    comment: "验证保存完成"

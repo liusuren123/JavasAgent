@@ -1,0 +1,20 @@
+name: "浏览器添加书签"
+description: "在浏览器中将当前页面添加为书签"
+category: "browser"
+version: "1.0"
+triggers:
+  - "添加书签"
+  - "收藏页面"
+  - "书签"
+
+steps:
+  - action: key_combo
+    keys: "ctrl+d"
+    comment: "打开添加书签对话框"
+
+  - action: wait
+    duration: 0.5
+
+  - action: key_combo
+    keys: "enter"
+    comment: "确认添加书签"

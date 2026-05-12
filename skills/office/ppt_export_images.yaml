@@ -1,0 +1,31 @@
+name: "PPT 导出图片"
+description: "将 PPT 当前幻灯片导出为图片"
+category: "office"
+version: "1.0"
+triggers:
+  - "ppt 导出图片"
+  - "ppt 保存图片"
+  - "幻灯片导出"
+
+steps:
+  - action: key_combo
+    keys: "alt+f"
+    comment: "打开文件菜单"
+
+  - action: wait
+    duration: 0.5
+
+  - action: click_text
+    text: "另存为"
+    comment: "点击另存为"
+
+  - action: wait
+    duration: 0.3
+
+  - action: click_text
+    text: "图片"
+    comment: "选择图片格式"
+
+  - action: key_combo
+    keys: "enter"
+    comment: "确认导出"
