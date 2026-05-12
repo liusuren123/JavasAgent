@@ -17,6 +17,11 @@ javas history        # 查看任务执行历史
 javas memory "查询"  # 检索长期记忆
 javas remember "内容" # 存入长期记忆
 javas team           # 查看多 Agent 团队状态
+javas service start  # 启动后台服务
+javas service stop   # 停止后台服务
+javas service status # 查询后台服务状态
+javas service install   # 设置开机自启
+javas service uninstall # 取消开机自启
 javas --version      # 查看版本
 javas --help         # 查看帮助
 ```
@@ -277,3 +282,94 @@ tools:
   email_ops:
     enabled: false            # 不需要邮件功能就关掉
 ```
+
+---
+
+## 后台常驻服务
+
+JavasAgent 可以作为后台服务运行，通过全局热键和托盘图标随时调用，无需每次打开终端。
+
+### 启动与停止
+
+```bash
+# 前台启动（终端显示日志，Ctrl+C 停止）
+javas service start
+
+# 后台静默启动
+javas service start --background
+
+# 查询服务状态
+javas service status
+
+# 停止后台服务
+javas service stop
+```
+
+### 开机自启
+
+```bash
+# 设置开机自动启动
+javas service install
+
+# 取消开机自启
+javas service uninstall
+```
+
+### 全局热键
+
+服务运行期间，以下热键在**任何应用**中都有效：
+
+| 热键 | 功能 | 说明 |
+|------|------|------|
+| `Ctrl+Alt+J` | 打开对话窗口 | 弹出悬浮对话窗口，直接与 Agent 交互 |
+| `Ctrl+Alt+V` | 语音开关 | 切换语音监听的开/关状态 |
+| `Ctrl+Alt+S` | 停止当前任务 | 中断 Agent 正在执行的任务 |
+
+> ⚠️ 热键需要管理员权限。非管理员运行时，热键功能静默降级，不报错但不生效。
+
+### 系统托盘
+
+服务启动后，系统托盘（任务栏右下角）会出现 JavasAgent 图标。
+
+**图标颜色含义：**
+
+| 颜色 | 状态 | 说明 |
+|------|------|------|
+| 🟢 绿色 | 活跃 | 正常运行，空闲等待 |
+| 🟡 黄色 | 处理中 | 正在执行任务 |
+| 🔴 红色 | 出错 | 服务异常，检查日志 |
+| ⚪ 灰色 | 已暂停 | 服务暂停 |
+
+**右键菜单：**
+
+| 菜单项 | 功能 |
+|--------|------|
+| 打开对话 | 打开悬浮对话窗口（等同于 `Ctrl+Alt+J`） |
+| 语音开关 | 启用/禁用语音监听 |
+| 设置 | 打开配置面板 |
+| 退出 | 停止服务并退出 |
+
+### 后台服务配置
+
+在 `config/default.yaml` 中添加 `daemon` 节可自定义后台服务：
+
+```yaml
+daemon:
+  enabled: true               # 是否启用后台服务
+  pipe_name: "javasagent_pipe" # Named Pipe 名称
+  autostart: false             # 是否开机自启（推荐用 javas service install）
+  tray_enabled: true           # 是否显示托盘图标
+  hotkeys:
+    chat: "ctrl+alt+j"         # 打开对话窗口热键
+    voice_toggle: "ctrl+alt+v" # 语音开关热键
+    stop_task: "ctrl+alt+s"    # 停止任务热键
+  window_width: 600            # 对话窗口宽度
+  window_height: 400           # 对话窗口高度
+  window_always_on_top: true   # 对话窗口置顶
+```
+
+### IPC 通信
+
+后台服务通过 **Named Pipe**（Windows 命名管道）与客户端通信。客户端命令（如 `javas service status`、`javas service stop`）通过 IPC 协议连接到后台服务。
+
+Named Pipe 名称默认 `javasagent_pipe`，同一台机器上只允许一个实例运行。

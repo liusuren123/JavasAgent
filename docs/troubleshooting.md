@@ -226,6 +226,92 @@ rm -rf ./data/memory/chroma
 
 ---
 
+## 后台服务问题
+
+### 热键不生效
+
+**症状**：按 `Ctrl+Alt+J/V/S` 没有反应
+
+**原因**：全局热键需要管理员权限注册
+
+**解决方案**：
+
+```bash
+# 以管理员身份打开终端（右键 → 以管理员身份运行）
+# 然后启动服务
+javas service start
+```
+
+如果不想每次手动提权，可以设置开机自启并以最高权限运行：
+
+```bash
+javas service install
+# 安装后，打开"任务计划程序"，找到 JavasAgent 任务
+# 右键 → 属性 → 勾选"使用最高权限运行"
+```
+
+> 💡 非管理员运行时，热键会静默降级，不影响托盘和 IPC 功能。
+
+### 托盘图标不显示
+
+**症状**：服务启动成功，但任务栏看不到图标
+
+**排查**：
+
+```bash
+# 检查 pystray 是否安装
+python -c "import pystray; print('pystray OK')"
+
+# 如果报错，安装依赖
+pip install pystray Pillow
+```
+
+**其他可能原因**：
+- Windows 任务栏设置隐藏了图标 → 右键任务栏 → 任务栏设置 → 选择哪些图标显示在任务栏上
+- 远程桌面（RDP）会话中，某些系统托盘功能受限
+
+### IPC 连接失败
+
+**症状**：`javas service status` 报连接失败或超时
+
+**排查**：
+
+```bash
+# 1. 确认服务在运行
+tasklist | findstr python
+
+# 2. 检查 Named Pipe 权限
+# Pipe 名称为 javasagent_pipe，需要同一用户会话访问
+# 如果通过"以其他用户身份运行"启动服务，IPC 会失败
+
+# 3. 重启服务
+javas service stop
+javas service start
+```
+
+**常见原因**：
+- 服务未启动（先执行 `javas service start`）
+- 不同用户会话（服务和客户端必须在同一 Windows 会话）
+- 服务进程已崩溃（检查日志或重启）
+
+### 语音功能在后台模式下不可用
+
+**症状**：后台模式下 `Ctrl+Alt+V` 切换语音没有反应
+
+**排查**：
+
+```bash
+# 检查语音依赖是否完整
+python -c "from src.voice.pipeline import VoicePipeline; print('voice OK')"
+```
+
+**可能原因**：
+- 语音依赖未安装：`pip install pyaudio silero-vad edge-tts faster-whisper`
+- 麦克风被其他程序占用
+- 后台服务未加载语音模块（检查配置 `daemon.voice_enabled`）
+
+---
+
 ## 诊断命令
 
 ```bash
