@@ -63,10 +63,12 @@ class SkillExecutor:
         skill_registry: SkillRegistry,
         skill_learner: Any | None = None,
         execution_timeout: float = DEFAULT_EXECUTION_TIMEOUT,
+        step_executor: Any | None = None,
     ) -> None:
         self._registry = skill_registry
         self._learner = skill_learner
         self._timeout = execution_timeout
+        self._step_executor = step_executor  # YAML 技能的步骤执行器
 
         self._matcher = SkillMatcher()
         self._feedback = SkillFeedback(learner=skill_learner)
@@ -76,9 +78,10 @@ class SkillExecutor:
         self._executors: dict[str, Any] = {}
 
         logger.debug(
-            "SkillExecutor 初始化 (timeout={}s, learner={})",
+            "SkillExecutor 初始化 (timeout={}s, learner={}, yaml_executor={})",
             self._timeout,
             "已绑定" if self._learner else "未绑定",
+            "已绑定" if self._step_executor else "未绑定",
         )
 
     # ------------------------------------------------------------------
@@ -201,6 +204,11 @@ class SkillExecutor:
             )
             return {"success": False, "error": error_msg}
 
+        # --- YAML 技能执行路径 ---
+        if getattr(skill, "yaml_path", "") and self._step_executor:
+            return await self._execute_yaml_skill(skill, params)
+
+        # --- 注册函数执行路径（原有逻辑） ---
         executor_fn = self._executors.get(skill_name)
         if executor_fn is None:
             error_msg = f"技能 '{skill_name}' 没有注册执行函数"
@@ -249,6 +257,39 @@ class SkillExecutor:
             return await executor_fn(params)
         else:
             return executor_fn(params)
+
+    # ------------------------------------------------------------------
+    # YAML 技能执行
+    # ------------------------------------------------------------------
+
+    async def _execute_yaml_skill(self, skill: SkillDefinition, params: dict) -> dict:
+        """执行 YAML 技能：创建上下文 → 调用 StepExecutor。"""
+        from src.skills.context import SkillContext
+
+        start_time = time.monotonic()
+        try:
+            context = SkillContext(parameters=params)
+            steps = getattr(skill, "steps", [])
+            result = await self._step_executor.execute_steps(steps, context)
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+
+            await self._record_execution(
+                skill.name, params, result,
+                success=result.get("success", True),
+                error=result.get("error", ""),
+                duration_ms=duration_ms,
+            )
+            result["duration_ms"] = duration_ms
+            return result
+
+        except Exception as e:
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            error_msg = f"YAML 技能执行异常: {e}"
+            logger.exception(error_msg)
+            await self._record_execution(
+                skill.name, params, {}, success=False, error=error_msg, duration_ms=duration_ms
+            )
+            return {"success": False, "error": error_msg, "duration_ms": duration_ms}
 
     # ------------------------------------------------------------------
     # 技能匹配（委托给 SkillMatcher）

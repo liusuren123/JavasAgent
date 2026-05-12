@@ -111,6 +111,14 @@ class SkillMatcher:
             elif desc_lower in tag_lower or tag_lower in desc_lower:
                 score += 2.0
 
+        # triggers 匹配（YAML 技能触发关键词）
+        for trigger in getattr(skill, "triggers", []):
+            trigger_lower = trigger.lower()
+            if desc_lower == trigger_lower or trigger_lower in desc_lower:
+                score += 7.0  # triggers 权重较高
+            elif desc_lower in trigger_lower:
+                score += 3.0
+
         # 词汇级别匹配
         name_terms = set(re.findall(r"\w+", name_lower))
         desc_skill_terms = set(re.findall(r"\w+", description_lower))

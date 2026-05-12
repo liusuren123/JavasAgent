@@ -169,3 +169,13 @@ voice:
     interruption_enabled: true
     greeting: "我在，请说。"
     farewell: "再见。"
+
+# YAML 技能系统配置
+skills:
+  dirs:
+    - "./skills"
+    - "./data/skills"
+  hot_reload: true
+  max_loop_iterations: 100
+  max_skill_depth: 5
+  validate_on_load: true
