@@ -92,6 +92,156 @@ def cli() -> None:
     pass
 
 
+# ------------------------------------------------------------------
+# service 子命令组
+# ------------------------------------------------------------------
+@cli.group()
+def service() -> None:
+    """后台服务管理。"""
+    pass
+
+
+@service.command("start")
+@click.option("--background", is_flag=True, default=False, help="后台静默运行（无终端输出）")
+def service_start(background: bool) -> None:
+    """启动后台服务。
+
+    \b
+    javas service start             前台运行（可看日志）
+    javas service start --background  后台静默运行
+    """
+    from src.daemon.service import JavasService, ServiceConfig
+
+    config = load_config()
+    daemon_cfg = getattr(config, "daemon", None)
+
+    svc_config = ServiceConfig()
+    if daemon_cfg is not None:
+        svc_config.pipe_name = getattr(daemon_cfg, "pipe_name", svc_config.pipe_name)
+        svc_config.autostart = getattr(daemon_cfg, "autostart", svc_config.autostart)
+        svc_config.tray_enabled = getattr(daemon_cfg, "tray_enabled", svc_config.tray_enabled)
+        svc_config.tray_tooltip = getattr(daemon_cfg, "tray_tooltip", svc_config.tray_tooltip)
+        svc_config.window_width = getattr(daemon_cfg, "window_width", svc_config.window_width)
+        svc_config.window_height = getattr(daemon_cfg, "window_height", svc_config.window_height)
+        svc_config.window_always_on_top = getattr(daemon_cfg, "window_always_on_top", svc_config.window_always_on_top)
+
+        # 热键
+        hotkeys = getattr(daemon_cfg, "hotkeys", None)
+        if hotkeys and isinstance(hotkeys, dict):
+            svc_config.hotkeys = hotkeys
+
+    svc = JavasService(config=svc_config)
+
+    if background:
+        # 后台模式：最小化输出
+        import logging
+        logging.basicConfig(level=logging.WARNING)
+    else:
+        console.print(
+            Panel(
+                "[bold cyan]JavasAgent[/bold cyan] 后台服务\n"
+                "按 [bold]Ctrl+C[/bold] 停止",
+                title="🚀 Service Mode",
+                border_style="cyan",
+            )
+        )
+
+    async def _run():
+        try:
+            await svc.start()
+            # 保持运行直到停止
+            while svc.is_running:
+                await asyncio.sleep(1)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            await svc.stop()
+
+    try:
+        asyncio.run(_run())
+    except KeyboardInterrupt:
+        console.print("[dim]服务已停止[/dim]")
+
+
+@service.command("stop")
+def service_stop() -> None:
+    """停止后台服务。"""
+    from src.daemon.ipc_client import IPCClient
+
+    try:
+        client = IPCClient()
+        client.connect()
+        result = client.send_request("stop", {})
+        client.close()
+        console.print("[green]✅ 服务停止命令已发送[/green]")
+    except ConnectionError:
+        console.print("[yellow]⚠️ 后台服务未运行[/yellow]")
+    except Exception as exc:
+        console.print(f"[red]❌ 停止失败: {exc}[/red]")
+
+
+@service.command("status")
+def service_status() -> None:
+    """查询后台服务状态。"""
+    from src.daemon.ipc_client import IPCClient
+
+    try:
+        client = IPCClient()
+        client.connect()
+        result = client.send_request("status", {})
+        client.close()
+
+        table = Table(title="📊 后台服务状态")
+        table.add_column("组件", style="cyan")
+        table.add_column("状态")
+
+        state = result.get("state", "unknown")
+        state_icon = {"running": "🟢", "stopped": "🔴", "starting": "🟡"}.get(state, "⚪")
+        table.add_row("服务状态", f"{state_icon} {state}")
+        table.add_row("Agent", "✅ 就绪" if result.get("agent") else "❌ 未就绪")
+        table.add_row("IPC 服务器", "✅ 运行" if result.get("ipc_server") else "❌ 停止")
+        table.add_row("系统托盘", "✅ 运行" if result.get("tray") else "❌ 停止")
+        table.add_row("全局热键", "✅ 活跃" if result.get("hotkey") else "❌ 停止")
+        table.add_row("对话窗口", "✅ 就绪" if result.get("chat_window") else "❌ 未创建")
+        voice_status = "✅ 开启" if result.get("voice_enabled") else "⏸️ 关闭"
+        table.add_row("语音", voice_status)
+
+        console.print(table)
+    except ConnectionError:
+        console.print("[yellow]⚠️ 后台服务未运行[/yellow]")
+        console.print("使用 [bold]javas service start[/bold] 启动")
+    except Exception as exc:
+        console.print(f"[red]❌ 查询失败: {exc}[/red]")
+
+
+@service.command("install")
+def service_install() -> None:
+    """启用开机自启。"""
+    from src.daemon.autostart import AutoStart
+
+    try:
+        AutoStart.enable()
+        console.print("[green]✅ 开机自启已启用[/green]")
+    except RuntimeError as exc:
+        console.print(f"[red]❌ {exc}[/red]")
+    except OSError as exc:
+        console.print(f"[red]❌ 注册表写入失败: {exc}[/red]")
+
+
+@service.command("uninstall")
+def service_uninstall() -> None:
+    """禁用开机自启。"""
+    from src.daemon.autostart import AutoStart
+
+    try:
+        AutoStart.disable()
+        console.print("[green]✅ 开机自启已禁用[/green]")
+    except RuntimeError as exc:
+        console.print(f"[red]❌ {exc}[/red]")
+    except OSError as exc:
+        console.print(f"[red]❌ 注册表操作失败: {exc}[/red]")
+
+
 @cli.command()
 def chat() -> None:
     """启动交互式对话。"""
