@@ -1,0 +1,20 @@
+name: "全屏截图"
+description: "截取当前屏幕并保存为证据"
+category: "system"
+version: "1.0"
+triggers:
+  - "截图"
+  - "截屏"
+  - "screenshot"
+
+parameters:
+  save_to:
+    type: string
+    description: "保存路径（可选）"
+    default: ""
+    required: false
+
+steps:
+  - action: screenshot
+    save_to: "{{parameters.save_to}}"
+    comment: "截取全屏"
