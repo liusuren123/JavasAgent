@@ -28,6 +28,7 @@ dependencies = [
     "watchdog>=4.0",
     "psutil>=5.9",
     "winotify>=1.1; sys_platform == 'win32'",
+    "pystray>=0.19",
 ]
 
 [project.optional-dependencies]
