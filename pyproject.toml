@@ -27,6 +27,7 @@ dependencies = [
     "click>=8.0",
     "watchdog>=4.0",
     "psutil>=5.9",
+    "uiautomation>=2.0; sys_platform == 'win32'",
     "winotify>=1.1; sys_platform == 'win32'",
     "pystray>=0.19",
     "keyboard>=0.13",

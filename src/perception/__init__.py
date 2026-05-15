@@ -22,6 +22,7 @@ from src.perception.ocr_models import (
 )
 from src.perception.screen_analyzer import ScreenAnalyzer
 from src.perception.vision_eye import VisionEye, VisionFrame
+from src.perception.ui_detector import UIADetector, UIDetector, UIElement
 from src.perception.window_manager import WindowInfo, WindowManager
 
 __all__ = [
@@ -41,6 +42,9 @@ __all__ = [
     "TextBlock",
     "TextElement",
     "TextLocation",
+    "UIADetector",
+    "UIDetector",
+    "UIElement",
     "TimePatternTracker",
     "TimeSlot",
     "WindowInfo",
