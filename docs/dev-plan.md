@@ -57,17 +57,26 @@
   - 测试文件管理器控件树
 - [ ] T5.6：git commit + push
 
-### Step 6：UIA 操作能力
-- [ ] T6.1：在 `UIADetector` 中添加操作方法
-  - `click_element(element)` — 通过 UIA Invoke Pattern 点击
-  - `type_text(element, text)` — 通过 UIA Value Pattern 输入
-  - `select_item(element, value)` — 通过 Selection Pattern 选择
-  - `get_value(element)` — 读取元素当前值
-- [ ] T6.2：实现操作安全检查（目标元素是否存在、是否可操作）
-- [ ] T6.3：测试 `tests/perception/test_ui_operations.py`
-  - 计算器加法操作端到端测试
-  - 记事本输入+保存测试
-- [ ] T6.4：git commit + push
+### Step 6：UIA 操作能力 ✅ 16/16 测试通过
+- [x] T6.1：在 `src/perception/ui_operator.py` 中创建 `UIAOperator` 类
+  - `click_element(element)` — Invoke Pattern + Click 回退
+  - `type_text(element, text)` — Value Pattern + SendKeys 回退
+  - `select_item(element, value)` — SelectionItem Pattern + Click 回退
+  - `get_value(element)` — Value Pattern + Name 属性回退
+  - `set_focus(element)` — SetFocus
+  - `expand(element)` — ExpandCollapse Pattern
+- [x] T6.2：实现操作安全检查
+  - `_validate_element(element)` — 验证元素有效且在屏幕上
+  - `_ensure_pattern(element, pattern_name)` — 确保元素支持指定操作模式
+  - 操作前截图记录（用于事后审计）
+  - 操作后验证（重新读取状态确认）
+- [x] T6.3：测试 `tests/perception/test_ui_operator.py` — 16/16 通过
+  - 安全检查测试(8): 无效元素、零bbox、屏幕外
+  - 记事本输入测试(2): type_text+get_value、set_focus
+  - 计算器操作测试(2): 加法流程(3+5=8)、单按钮点击
+  - get_value测试(1): 记事本内容读取验证
+  - 模型测试(3): OperationResult 属性验证
+- [x] T6.4：git commit + push
 
 ### Step 7：截图+AI 补充检测（OmniParser/Florence-2）
 - [ ] T7.1：调研 OmniParser 安装和依赖（GPU/CPU 兼容性）
