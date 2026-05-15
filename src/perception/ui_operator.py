@@ -551,7 +551,12 @@ class UIAOperator:
         ts = datetime.now().isoformat()
         start = time.monotonic()
         timeout = timeout or self.default_timeout
-        element_desc = f"type={element.type} text={element.text!r}"
+
+        # 安全获取元素描述（element 可能不是 UIElement）
+        if isinstance(element, UIElement):
+            element_desc = f"type={element.type} text={element.text!r}"
+        else:
+            element_desc = f"<invalid: {type(element).__name__}>"
 
         # 1. 验证元素
         try:
