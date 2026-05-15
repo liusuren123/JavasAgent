@@ -84,6 +84,10 @@ def analyze_screenshot(image_path: str, prompt: str, timeout: int = 30) -> dict:
         data = resp.json()
         response_text = data.get("response", "").strip()
 
+        # 移除 qwen3 的 <think/> 标签内容（如果存在）
+        import re
+        response_text = re.sub(r'<think[\s\S]*?</think\s*>', '', response_text).strip()
+
         # 解析模型回复：如果包含 [YES] 或 "成功" 类关键词 → 通过
         success_keywords = ["[YES]", "[PASS]", "成功", "已打开", "已输入", "已保存",
                             "文本已显示", "记事本已打开", "文件内容匹配", "内容一致"]
@@ -196,6 +200,49 @@ class StepResult:
 
 
 # ─── 测试步骤 ──────────────────────────────────────────
+def bring_to_front(window_title: str) -> bool:
+    """使用 Win32 API 将指定标题的窗口置于前台。
+    使用部分匹配，window_title 只需是窗口标题的子串。"""
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+
+        # 枚举所有窗口找匹配的
+        EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+        found_hwnd = [0]
+
+        def enum_callback(hwnd, _):
+            length = user32.GetWindowTextLengthW(hwnd)
+            if length > 0:
+                buf = ctypes.create_unicode_buffer(length + 1)
+                user32.GetWindowTextW(hwnd, buf, length + 1)
+                title = buf.value
+                if window_title in title:
+                    found_hwnd[0] = hwnd
+                    return False  # stop enumeration
+            return True
+
+        user32.EnumWindows(EnumWindowsProc(enum_callback), 0)
+        if found_hwnd[0]:
+            SW_RESTORE = 9
+            user32.ShowWindow(found_hwnd[0], SW_RESTORE)
+            user32.SetForegroundWindow(found_hwnd[0])
+            return True
+
+        return False
+    except Exception:
+        return False
+
+
+def bring_notepad_front() -> bool:
+    """将记事本窗口置于前台（尝试多种标题匹配）"""
+    # Windows 11 记事本标题格式："无标题 - Notepad" 或 "*无标题 - Notepad"（有未保存修改时）
+    for title in ["Notepad", "无标题", "记事本"]:
+        if bring_to_front(title):
+            return True
+    return False
+
+
 def step_1_open_notepad(results: list) -> StepResult:
     """Step 1: 打开记事本"""
     sr = StepResult("打开记事本")
@@ -207,16 +254,23 @@ def step_1_open_notepad(results: list) -> StepResult:
                         capture_output=True, timeout=5)
         wait(1, "等待旧进程关闭")
 
-        # 用 subprocess 打开记事本
-        subprocess.Popen(["notepad.exe"])
+        # 用 os.startfile 打开记事本（更可靠）
+        os.startfile("notepad.exe")
         wait(WAIT_MEDIUM, "等待记事本启动")
+
+        # 尝试将记事本窗口置于前台
+        bring_notepad_front()
+        wait(1, "等待窗口前台切换")
         sr.screenshot_path = screenshot("step1_notepad_opened")
 
-        # 视觉验证：截图分析记事本是否打开
+        # 视觉验证：截图分析记事本是否打开且可见
         vision = analyze_screenshot(
             str(sr.screenshot_path),
-            "请判断屏幕上是否打开了 Windows 记事本(Notepad)窗口。"
-            "如果是，回复 [YES] 记事本已打开；如果不是，回复 [NO] 未检测到记事本窗口。"
+            "请判断屏幕上是否可以看到 Windows 记事本(Notepad)窗口。"
+            "Windows 11 记事本可能是深色主题。"
+            "标题栏通常显示'无标题 - Notepad'或类似文本。"
+            "如果能看到记事本窗口，回复 [YES] 记事本已打开；"
+            "如果完全看不到记事本窗口，回复 [NO] 未检测到记事本窗口。"
         )
         sr.set_vision_result(vision["success"], vision["analysis"])
         print(f"  👁️ 视觉判定: {'通过' if vision['success'] else '未通过'} — {vision['analysis'][:80]}")
@@ -240,23 +294,26 @@ def step_2_type_chinese(results: list) -> StepResult:
     print(f"\n[Step 2] 输入中文文本")
 
     try:
-        # 确保记事本在前台 — 点击窗口中央
-        # 记事本默认窗口不大，点击屏幕中偏左上区域
-        np_x = SCREEN_W // 3
-        np_y = SCREEN_H // 3
-        pyautogui.click(np_x, np_y)
+        # 用 Win32 API 将记事本置于前台（比坐标点击可靠）
+        bring_notepad_front()
         wait(WAIT_SHORT, "等待记事本获得焦点")
         sr.screenshot_path = screenshot("step2_before_input")
 
-        # 视觉验证：记事本是否有焦点
+        # 视觉验证：记事本是否在前台
         vision_focus = analyze_screenshot(
             str(sr.screenshot_path),
-            "请判断当前屏幕上的记事本窗口是否处于活跃(前台)状态（标题栏是否高亮）。"
-            "如果是，回复 [YES] 记事本已获得焦点；否则回复 [NO]。"
+            "请判断当前屏幕上的记事本窗口是否处于活跃(前台)状态（标题栏是否高亮/激活）。"
+            "如果记事本在前台（标题栏高亮），回复 [YES] 记事本已获得焦点；否则回复 [NO]。"
         )
         print(f"  👁️ 焦点检查: {'通过' if vision_focus['success'] else '未通过'} — {vision_focus['analysis'][:80]}")
 
         # 输入中文文本（剪贴板方式）
+        # 先全选+删除清空已有内容（防止会话恢复残留）
+        pyautogui.hotkey("ctrl", "a")
+        wait(0.3)
+        pyautogui.press("delete")
+        wait(0.3)
+
         paste_text(TEST_TEXT)
         wait(WAIT_SHORT, "等待文本输入")
         sr.screenshot_path = screenshot("step2_text_typed")
@@ -289,6 +346,10 @@ def step_3_save_file(results: list) -> StepResult:
         # 清理旧的测试文件
         if SAVE_FILE_PATH.exists():
             SAVE_FILE_PATH.unlink()
+
+        # 确保记事本在前台
+        bring_notepad_front()
+        wait(WAIT_SHORT, "确保记事本在前台")
 
         # Ctrl+S 打开保存对话框
         pyautogui.hotkey("ctrl", "s")
@@ -396,6 +457,9 @@ def step_5_close_notepad(results: list) -> StepResult:
     print("\n[Step 5] 关闭记事本")
 
     try:
+        # 确保记事本在前台
+        bring_notepad_front()
+        wait(WAIT_SHORT, "等待记事本获得焦点")
         pyautogui.hotkey("alt", "f4")
         wait(WAIT_SHORT, "等待记事本关闭")
         sr.screenshot_path = screenshot("step5_notepad_closed")

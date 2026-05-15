@@ -1,0 +1,87 @@
+{
+  "test_name": "Notepad Text Edit E2E",
+  "timestamp": "2026-05-15T14:00:09.466268",
+  "screen_resolution": "3840x2160",
+  "test_text": "JavasAgent端到端测试：记事本中文输入验证\n第二行：Hello World!\n第三行：测试完成。",
+  "save_path": "C:\\WINDOWS\\TEMP\\javasagent_notepad_test.txt",
+  "vision_model": "qwen3-vl",
+  "total_duration_sec": 57.16,
+  "summary": {
+    "total_steps": 5,
+    "script_passed": 0,
+    "vision_available": 4,
+    "vision_passed": 2,
+    "final_passed": 2,
+    "final_failed": 3,
+    "final_pass_rate": "40%"
+  },
+  "failure_breakdown": {
+    "PERCEPTION": 0,
+    "LOCATION": 0,
+    "OPERATION": 0,
+    "DECISION": 3
+  },
+  "steps": [
+    {
+      "step": "打开记事本",
+      "script_success": false,
+      "vision_success": true,
+      "final_success": true,
+      "duration_sec": null,
+      "screenshot": "step1_notepad_opened.png",
+      "detail": "",
+      "error": null,
+      "failure_category": null,
+      "vision_analysis": "[YES] 记事本已打开"
+    },
+    {
+      "step": "输入中文文本",
+      "script_success": false,
+      "vision_success": false,
+      "final_success": false,
+      "duration_sec": null,
+      "screenshot": "step2_text_typed.png",
+      "detail": "已输入文本（剪贴板粘贴方式）",
+      "error": null,
+      "failure_category": "DECISION",
+      "vision_analysis": "[NO]"
+    },
+    {
+      "step": "保存文件到指定路径",
+      "script_success": false,
+      "vision_success": true,
+      "final_success": true,
+      "duration_sec": null,
+      "screenshot": "step3_after_save.png",
+      "detail": "保存到: C:\\WINDOWS\\TEMP\\javasagent_notepad_test.txt",
+      "error": null,
+      "failure_category": null,
+      "vision_analysis": "[YES] 已保存"
+    },
+    {
+      "step": "验证文件内容",
+      "script_success": false,
+      "vision_success": null,
+      "final_success": false,
+      "duration_sec": 0.0,
+      "screenshot": "step4_verify_state.png",
+      "detail": "",
+      "error": "文件不存在: C:\\WINDOWS\\TEMP\\javasagent_notepad_test.txt",
+      "failure_category": "DECISION",
+      "vision_analysis": ""
+    },
+    {
+      "step": "关闭记事本",
+      "script_success": false,
+      "vision_success": false,
+      "final_success": false,
+      "duration_sec": null,
+      "screenshot": "step5_notepad_closed.png",
+      "detail": "已发送 Alt+F4 关闭记事本",
+      "error": null,
+      "failure_category": "DECISION",
+      "vision_analysis": "[NO]"
+    }
+  ],
+  "note": "每步有脚本判定 + Ollama qwen3-vl 视觉判定，最终结果以视觉判定为准。"
+}
