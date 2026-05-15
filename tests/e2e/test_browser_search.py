@@ -22,6 +22,11 @@ import traceback
 from pathlib import Path
 from datetime import datetime
 
+# Fix Windows GBK console encoding
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 import pyautogui
 from PIL import Image
 

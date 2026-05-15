@@ -1,0 +1,82 @@
+{
+  "test_name": "Browser Search E2E",
+  "timestamp": "2026-05-15T13:21:04.014463",
+  "screen_resolution": "3840x2160",
+  "search_keyword": "JavasAgent GitHub",
+  "total_duration_sec": 53.0,
+  "summary": {
+    "total_steps": 6,
+    "passed": 2,
+    "failed": 4,
+    "pass_rate": "33%"
+  },
+  "failure_breakdown": {
+    "PERCEPTION": 0,
+    "LOCATION": 3,
+    "OPERATION": 1,
+    "DECISION": 0
+  },
+  "steps": [
+    {
+      "step": "打开浏览器",
+      "success": true,
+      "duration_sec": 10.6,
+      "screenshot": "step1_after.png",
+      "detail": "Edge 浏览器已打开，显示新标签页",
+      "error": null,
+      "failure_category": null
+    },
+    {
+      "step": "导航到搜索引擎",
+      "success": true,
+      "duration_sec": 14.57,
+      "screenshot": "step2_bing_loaded.png",
+      "detail": "已导航到必应搜索页面，页面加载正常",
+      "error": null,
+      "failure_category": null
+    },
+    {
+      "step": "输入搜索关键词",
+      "success": false,
+      "duration_sec": 5.57,
+      "screenshot": "step3_keyword_typed.png",
+      "detail": "点击坐标未命中搜索框（隐私弹窗遮挡），关键词未成功输入",
+      "error": "点击位置(1920,720)未命中必应搜索框。必应页面底部有Cookie隐私弹窗遮挡搜索框区域，焦点可能落在弹窗上而非搜索框。",
+      "failure_category": "LOCATION"
+    },
+    {
+      "step": "执行搜索",
+      "success": false,
+      "duration_sec": 10.86,
+      "screenshot": "step4_search_results.png",
+      "detail": "搜索未执行——由于关键词未输入到搜索框，回车键在错误区域触发",
+      "error": "因为Step3搜索框定位失败，关键词未输入搜索框。回车键在错误位置触发，必应搜索实际未执行。",
+      "failure_category": "OPERATION"
+    },
+    {
+      "step": "点击第一个搜索结果",
+      "success": false,
+      "duration_sec": 10.8,
+      "screenshot": "step5_first_result.png",
+      "detail": "由于搜索未执行，无搜索结果可点击。点击坐标命中了游戏启动器窗口。",
+      "error": "搜索未执行所以没有搜索结果。点击坐标(1920,756)命中了桌面上的'异环'游戏启动器，完全偏离目标。",
+      "failure_category": "LOCATION"
+    },
+    {
+      "step": "截图验证",
+      "success": true,
+      "duration_sec": 0.32,
+      "screenshot": "step6_final.png",
+      "detail": "最终截图已保存，用于人工分析",
+      "error": null,
+      "failure_category": null
+    }
+  ],
+  "analysis": {
+    "root_cause": "Step 3 搜索框定位失败是关键转折点。隐私弹窗遮挡搜索框 + 固定坐标无法适配弹窗遮挡场景。",
+    "failure_chain": "搜索框定位失败 → 关键词未输入 → 搜索未执行 → 无搜索结果可点击",
+    "classification_summary": "3次LOCATION失败（搜索框/第一个结果/游戏窗口误击），1次OPERATION失败（回车在错误位置触发）",
+    "key_insight": "固定坐标方案在真实桌面环境中不可靠。遮挡、弹窗、窗口位置变化等因素会导致定位完全偏离。需要UI元素精确检测能力（UIA/OCR）。"
+  },
+  "note": "这是验证性测试，使用 pyautogui 固定坐标操作。脚本自动化判定6/6通过，但通过AI视觉分析截图发现实际只有2/6真正成功。这本身就暴露了当前方案的严重问题：没有视觉验证能力，脚本无法判断操作是否真正生效。"
+}
