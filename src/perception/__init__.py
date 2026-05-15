@@ -31,6 +31,8 @@ from src.perception.ui_operator import (
     OpStatus,
     PatternNotSupportedError,
 )
+from src.perception.ai_detector import AIDetector
+from src.perception.hybrid_detector import HybridDetector
 from src.perception.window_manager import WindowInfo, WindowManager
 
 __all__ = [
@@ -59,6 +61,8 @@ __all__ = [
     "OperationResult",
     "OpStatus",
     "PatternNotSupportedError",
+    "AIDetector",
+    "HybridDetector",
     "TimePatternTracker",
     "TimeSlot",
     "WindowInfo",

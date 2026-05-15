@@ -29,6 +29,8 @@ from src.core.workflow_engine import WorkflowEngine
 from src.memory.long_term import LongTermMemory
 from src.memory.short_term import ShortTermMemory
 from src.perception.screen_analyzer import ScreenAnalyzer
+from src.perception.hybrid_detector import HybridDetector
+from src.perception.ui_operator import UIAOperator
 from src.platforms.base import PlatformAdapter
 from src.tools.image_ops import ImageOps
 from src.utils.config import AppConfig
@@ -68,6 +70,8 @@ class BaseAgent(TeamIntegrationMixin):
         self._memory = ShortTermMemory(config.memory.short_term_max_messages)
         self._long_term_memory = LongTermMemory(config.memory)
         self._screen_analyzer = ScreenAnalyzer(self._llm, config.perception)
+        self._ui_detector = HybridDetector()
+        self._ui_operator = UIAOperator()
         self._platform = platform
 
         self._running = False
