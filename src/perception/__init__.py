@@ -23,6 +23,14 @@ from src.perception.ocr_models import (
 from src.perception.screen_analyzer import ScreenAnalyzer
 from src.perception.vision_eye import VisionEye, VisionFrame
 from src.perception.ui_detector import UIADetector, UIDetector, UIElement
+from src.perception.ui_operator import (
+    UIAOperator,
+    UIAOperationError,
+    ElementValidationError,
+    OperationResult,
+    OpStatus,
+    PatternNotSupportedError,
+)
 from src.perception.window_manager import WindowInfo, WindowManager
 
 __all__ = [
@@ -45,6 +53,12 @@ __all__ = [
     "UIADetector",
     "UIDetector",
     "UIElement",
+    "UIAOperator",
+    "UIAOperationError",
+    "ElementValidationError",
+    "OperationResult",
+    "OpStatus",
+    "PatternNotSupportedError",
     "TimePatternTracker",
     "TimeSlot",
     "WindowInfo",
