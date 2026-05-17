@@ -145,37 +145,37 @@
 
 目标：Agent 能从执行过程中自动学习技能，新场景自动匹配已有技能。
 
-### Step 12：技能自动录制
-- [ ] T12.1：创建 `src/skills/recorder.py`
+### Step 12：技能自动录制 ✅
+- [x] T12.1：创建 `src/skills/recorder.py`
   - 监听 Agent 的每次操作（截图、点击、输入、等待）
   - 按时间顺序记录为步骤列表
   - 自动识别关键帧（操作前后的截图对比）
-- [ ] T12.2：录制结果自动转换为 YAML 技能描述
+- [x] T12.2：录制结果自动转换为 YAML 技能描述
   - 泛化坐标为语义描述（"点击'保存'按钮"而非"点击(300,200)"）
   - 自动提取 OCR 文本作为步骤描述
-- [ ] T12.3：测试 `tests/skills/test_recorder.py`
-- [ ] T12.4：git commit + push
+- [x] T12.3：测试 `tests/skills/test_recorder.py`
+- [x] T12.4：git commit + push
 
-### Step 13：技能检索与匹配
-- [ ] T13.1：升级 `src/skills/skill_matcher.py`
+### Step 13：技能检索与匹配 ✅
+- [x] T13.1：升级 `src/skills/skill_matcher.py`
   - 用户指令 → 向量化 → 匹配最相关的技能描述
   - 支持模糊匹配（"做个表格" → 匹配"Excel 创建表格"技能）
   - 返回匹配度 Top 3 + 置信度
-- [ ] T13.2：技能执行前确认机制
+- [x] T13.2：技能执行前确认机制
   - 匹配度 > 0.8 → 自动执行
   - 0.5-0.8 → 展示匹配结果，询问用户确认
   - < 0.5 → 告知无匹配技能，走普通规划流程
-- [ ] T13.3：测试 `tests/skills/test_skill_matching.py`
-- [ ] T13.4：git commit + push
+- [x] T13.3：测试 `tests/skills/test_skill_matching.py`
+- [x] T13.4：git commit + push
 
-### Step 14：技能库积累 + 端到端验证
-- [ ] T14.1：预置 5-10 个常用技能 YAML
+### Step 14：技能库积累 + 端到端验证 ✅
+- [x] T14.1：预置 5-10 个常用技能 YAML
   - 浏览器搜索、记事本编辑、Excel 操作、文件管理、截图保存等
-- [ ] T14.2：用真实场景验证技能闭环
+- [x] T14.2：用真实场景验证技能闭环
   - 用户说"帮我搜一下天气" → 自动匹配浏览器搜索技能 → 执行
-- [ ] T14.3：技能执行结果评分（成功/失败/部分成功）
-- [ ] T14.4：全量回归测试
-- [ ] T14.5：git commit + push
+- [x] T14.3：技能执行结果评分（成功/失败/部分成功）
+- [x] T14.4：全量回归测试 — 226/226 全部通过
+- [x] T14.5：git commit + push
 
 ---
 

@@ -1,0 +1,51 @@
+name: "记事本编辑文本"
+description: "打开记事本并输入指定文本内容"
+category: "office"
+version: "1.0"
+triggers:
+  - "记事本"
+  - "写文本"
+  - "编辑文本"
+  - "写个备忘"
+  - "notepad"
+
+parameters:
+  content:
+    type: string
+    description: "要输入的文本内容"
+    required: true
+
+steps:
+  - action: key_combo
+    keys: "win"
+    comment: "打开开始菜单"
+
+  - action: wait
+    duration: 0.3
+
+  - action: type_text
+    text: "notepad"
+    speed: "fast"
+    comment: "输入记事本"
+
+  - action: wait
+    duration: 0.5
+
+  - action: key_combo
+    keys: "enter"
+    comment: "打开记事本"
+
+  - action: wait
+    duration: 1.0
+
+  - action: type_text
+    text: "{{parameters.content}}"
+    speed: "normal"
+    comment: "输入文本内容"
+
+  - action: wait
+    duration: 0.3
+
+  - action: key_combo
+    keys: "ctrl+s"
+    comment: "保存文件"

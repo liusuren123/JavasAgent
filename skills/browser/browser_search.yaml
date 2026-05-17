@@ -1,0 +1,61 @@
+name: "浏览器搜索信息"
+description: "打开浏览器并搜索指定关键词"
+category: "browser"
+version: "1.0"
+triggers:
+  - "搜索"
+  - "搜一下"
+  - "查一下"
+  - "帮我搜"
+  - "搜索信息"
+  - "search"
+
+parameters:
+  query:
+    type: string
+    description: "搜索关键词"
+    required: true
+  engine:
+    type: string
+    description: "搜索引擎（baidu/google/bing）"
+    required: false
+    default: "baidu"
+
+steps:
+  - action: key_combo
+    keys: "win"
+    comment: "打开开始菜单"
+
+  - action: wait
+    duration: 0.3
+
+  - action: type_text
+    text: "chrome"
+    speed: "fast"
+    comment: "输入浏览器名称"
+
+  - action: wait
+    duration: 0.5
+
+  - action: key_combo
+    keys: "enter"
+    comment: "打开浏览器"
+
+  - action: wait
+    duration: 1.5
+
+  - action: key_combo
+    keys: "ctrl+l"
+    comment: "聚焦地址栏"
+
+  - action: wait
+    duration: 0.3
+
+  - action: type_text
+    text: "https://www.baidu.com/s?wd={{parameters.query}}"
+    speed: "fast"
+    comment: "输入搜索URL"
+
+  - action: key_combo
+    keys: "enter"
+    comment: "执行搜索"

@@ -1,0 +1,24 @@
+name: "关闭当前窗口"
+description: "关闭当前激活的窗口或应用程序"
+category: "system"
+version: "1.0"
+triggers:
+  - "关闭窗口"
+  - "关掉这个"
+  - "关闭程序"
+  - "退出应用"
+  - "close window"
+
+parameters: {}
+
+steps:
+  - action: key_combo
+    keys: "alt+f4"
+    comment: "发送 Alt+F4 关闭窗口"
+
+  - action: wait
+    duration: 0.5
+
+  - action: key_combo
+    keys: "enter"
+    comment: "确认关闭（如有确认弹窗）"

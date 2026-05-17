@@ -1,0 +1,43 @@
+name: "文件管理器操作"
+description: "打开文件资源管理器并导航到指定路径"
+category: "system"
+version: "1.0"
+triggers:
+  - "打开文件夹"
+  - "文件管理器"
+  - "浏览文件"
+  - "打开目录"
+  - "open folder"
+
+parameters:
+  folder_path:
+    type: string
+    description: "目标文件夹路径"
+    required: true
+
+steps:
+  - action: key_combo
+    keys: "win+e"
+    comment: "打开文件资源管理器"
+
+  - action: wait
+    duration: 1.0
+
+  - action: key_combo
+    keys: "ctrl+l"
+    comment: "聚焦地址栏"
+
+  - action: wait
+    duration: 0.3
+
+  - action: type_text
+    text: "{{parameters.folder_path}}"
+    speed: "fast"
+    comment: "输入目标路径"
+
+  - action: wait
+    duration: 0.2
+
+  - action: key_combo
+    keys: "enter"
+    comment: "导航到目标路径"

@@ -1,0 +1,38 @@
+name: "复制文件"
+description: "将指定文件复制到目标文件夹"
+category: "system"
+version: "1.0"
+triggers:
+  - "复制文件"
+  - "拷贝文件"
+  - "复制到"
+  - "copy file"
+
+parameters:
+  source_path:
+    type: string
+    description: "源文件完整路径"
+    required: true
+  target_folder:
+    type: string
+    description: "目标文件夹路径"
+    required: true
+
+steps:
+  - action: type_text
+    text: "复制文件从 {{parameters.source_path}} 到 {{parameters.target_folder}}"
+    comment: "展示操作意图"
+
+  - action: wait
+    duration: 0.2
+
+  - action: key_combo
+    keys: "ctrl+c"
+    comment: "复制选中文件"
+
+  - action: wait
+    duration: 0.3
+
+  - action: key_combo
+    keys: "ctrl+v"
+    comment: "粘贴到目标位置"
