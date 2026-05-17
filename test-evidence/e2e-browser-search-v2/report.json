@@ -1,9 +1,9 @@
 {
-  "time": "2026-05-15T15:44:07.099535",
+  "time": "2026-05-17T16:05:32.815673",
   "screen": "3840x2160",
   "method": "HybridDetector (UIA+AI)",
-  "total_steps": 6,
-  "passed": 6,
+  "total_steps": 2,
+  "passed": 2,
   "failed": 0,
   "pass_rate": "100%",
   "comparison": {
@@ -22,38 +22,6 @@
     {
       "step": 2,
       "name": "导航到必应",
-      "script_ok": true,
-      "actual_ok": true,
-      "fail_type": "",
-      "detail": ""
-    },
-    {
-      "step": 3,
-      "name": "输入搜索关键词",
-      "script_ok": true,
-      "actual_ok": true,
-      "fail_type": "",
-      "detail": ""
-    },
-    {
-      "step": 4,
-      "name": "执行搜索",
-      "script_ok": true,
-      "actual_ok": true,
-      "fail_type": "",
-      "detail": ""
-    },
-    {
-      "step": 5,
-      "name": "点击第一个结果",
-      "script_ok": true,
-      "actual_ok": true,
-      "fail_type": "",
-      "detail": ""
-    },
-    {
-      "step": 6,
-      "name": "截图验证",
       "script_ok": true,
       "actual_ok": true,
       "fail_type": "",
