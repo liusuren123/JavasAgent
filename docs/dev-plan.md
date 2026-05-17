@@ -120,14 +120,14 @@
 - [x] T9.3：测试 `tests/platforms/test_human_mouse.py` — 23/23 通过
 - [x] T9.4：git commit + push
 
-### Step 10：键盘输入人化
-- [ ] T10.1：升级键盘输入方法
+### Step 10：键盘输入人化 ✅ 20/20 全部通过
+- [x] T10.1：升级键盘输入方法
   - 按键间隔随机化（30-120ms，正态分布）
   - 偶尔触发退格+重输（模拟打字纠错，概率 2%）
   - 中英文切换增加延迟
-- [ ] T10.2：剪贴板输入也增加延迟（粘贴前等待 200-500ms）
-- [ ] T10.3：测试 `tests/platforms/test_human_keyboard.py`
-- [ ] T10.4：git commit + push
+- [x] T10.2：剪贴板输入也增加延迟（粘贴前等待 200-500ms）
+- [x] T10.3：测试 `tests/platforms/test_human_keyboard.py` — 20/20 通过
+- [x] T10.4：git commit + push
 
 ### Step 11：基于 UI 检测的操作（不再用坐标）
 - [ ] T11.1：创建 `src/platforms/smart_operator.py`
