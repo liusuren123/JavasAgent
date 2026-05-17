@@ -108,17 +108,17 @@
 
 目标：鼠标和键盘操作更像人类，降低被检测风险。
 
-### Step 9：鼠标轨迹人化
-- [ ] T9.1：升级 `src/platforms/windows.py` 的鼠标移动
+### Step 9：鼠标轨迹人化 ✅ 23测试全通过
+- [x] T9.1：升级 `src/platforms/windows.py` 的鼠标移动
   - 贝塞尔曲线增加随机控制点偏移
   - 移动速度非线性（启动慢 → 中间快 → 接近目标减速）
   - 轨迹增加微抖动（±1-2px 随机偏移）
-- [ ] T9.2：点击行为人化
-  - 按下和抬起重写为独立操作
+- [x] T9.2：点击行为人化
+  - 按下和抬起重写为独立操作（mouse_down/mouse_up）
   - 按压时长随机化（50-150ms）
   - 点击后微小移动（±3px）
-- [ ] T9.3：测试 `tests/platforms/test_human_mouse.py`
-- [ ] T9.4：git commit + push
+- [x] T9.3：测试 `tests/platforms/test_human_mouse.py` — 23/23 通过
+- [x] T9.4：git commit + push
 
 ### Step 10：键盘输入人化
 - [ ] T10.1：升级键盘输入方法
