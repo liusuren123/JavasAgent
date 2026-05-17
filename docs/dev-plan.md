@@ -39,23 +39,23 @@
 
 技术方案：Windows UIA + OmniParser 混合（调研报告：`research-desktop-ui-detection.md`）
 
-### Step 5：UIA 基础封装
-- [ ] T5.1：安装 `uiautomation` 库，验证基本功能
-- [ ] T5.2：创建 `src/perception/ui_detector.py`，定义 `UIElement` 数据模型
+### Step 5：UIA 基础封装 ✅
+- [x] T5.1：安装 `uiautomation` 库，验证基本功能
+- [x] T5.2：创建 `src/perception/ui_detector.py`，定义 `UIElement` 数据模型
   - 属性：bbox, type, text, confidence, source, clickable, actionable
-- [ ] T5.3：实现 `UIADetector` 类：扫描指定窗口的所有 UI 元素
+- [x] T5.3：实现 `UIADetector` 类：扫描指定窗口的所有 UI 元素
   - 获取控件树 → 提取 BoundingRectangle + ControlType + Name
   - 过滤不可见/屏幕外元素
-- [ ] T5.4：实现元素查找方法
+- [x] T5.4：实现元素查找方法
   - `find_by_name(name)` — 按名称查找
   - `find_by_type(control_type)` — 按类型查找
   - `find_by_text(text)` — 按文本内容查找
   - `find_by_automation_id(id)` — 按自动化ID查找
-- [ ] T5.5：测试 `tests/perception/test_ui_detector.py`
+- [x] T5.5：测试 `tests/perception/test_ui_detector.py`
   - 测试记事本窗口元素提取
   - 测试计算器按钮定位
   - 测试文件管理器控件树
-- [ ] T5.6：git commit + push
+- [x] T5.6：git commit + push
 
 ### Step 6：UIA 操作能力 ✅ 16/16 测试通过
 - [x] T6.1：在 `src/perception/ui_operator.py` 中创建 `UIAOperator` 类
@@ -78,29 +78,29 @@
   - 模型测试(3): OperationResult 属性验证
 - [x] T6.4：git commit + push
 
-### Step 7：截图+AI 补充检测（OmniParser/Florence-2）
-- [ ] T7.1：调研 OmniParser 安装和依赖（GPU/CPU 兼容性）
-- [ ] T7.2：创建 `src/perception/ai_detector.py`
+### Step 7：截图+AI 补充检测（OmniParser/Florence-2） ✅ 16测试全通过
+- [x] T7.1：调研 OmniParser 安装和依赖（GPU/CPU 兼容性）
+- [x] T7.2：创建 `src/perception/ai_detector.py`
   - 截图 → AI 模型检测 → 输出 UIElement 列表
   - 优先用本地 Ollama qwen3-vl，云端作 fallback
-- [ ] T7.3：实现 UIA + AI 结果融合逻辑
+- [x] T7.3：实现 UIA + AI 结果融合逻辑
   - UIA 结果优先（坐标精确）
   - AI 结果补充 UIA 遗漏的区域
   - 去重：同一区域只保留一个结果
-- [ ] T7.4：测试 `tests/perception/test_ai_detector.py`
-- [ ] T7.5：git commit + push
+- [x] T7.4：测试 `tests/perception/test_ai_detector.py`
+- [x] T7.5：git commit + push
 
-### Step 8：混合检测器集成 + Agent 接入
-- [ ] T8.1：创建 `src/perception/hybrid_detector.py`
+### Step 8：混合检测器集成 + Agent 接入 ✅
+- [x] T8.1：创建 `src/perception/hybrid_detector.py`
   - `detect(window)` → UIA 先扫 → AI 补充 → OCR 增强 → 返回合并结果
   - `find(query)` → 自然语言查找（"找到输入框" → 匹配 Edit 控件）
-- [ ] T8.2：将 HybridDetector 接入 BaseAgent 感知层
+- [x] T8.2：将 HybridDetector 接入 BaseAgent 感知层
   - 替换现有的截图+视觉模型坐标猜测逻辑
   - Agent 操作时使用 UIA 精确坐标
-- [ ] T8.3：更新 `src/tools/browser_control.py` 等工具使用新检测器
-- [ ] T8.4：测试 `tests/perception/test_hybrid_detector.py`
-- [ ] T8.5：用 Phase 1 的浏览器搜索场景重新验证
-- [ ] T8.6：git commit + push
+- [x] T8.3：更新 `src/tools/browser_control.py` 等工具使用新检测器
+- [x] T8.4：测试 `tests/perception/test_hybrid_detector.py`
+- [x] T8.5：用 Phase 1 的浏览器搜索场景重新验证 — 通过率从33%提升到100%
+- [x] T8.6：git commit + push
 
 ---
 
