@@ -61,7 +61,7 @@ class TestInit:
         assert hand._config.move_speed == 1.0
         assert hand._config.click_offset_range == 3
         assert hand._config.typo_probability == 0.02
-        assert hand._config.base_type_interval == 0.05
+        assert hand._config.type_interval_mu == 0.075
         assert hand._config.bezier_control_points == 3
         assert hand._config.jitter_range == 2.0
 
@@ -70,7 +70,7 @@ class TestInit:
             move_speed=2.0,
             click_offset_range=5,
             typo_probability=0.1,
-            base_type_interval=0.1,
+            type_interval_mu=0.1,
             bezier_control_points=2,
             jitter_range=1.0,
         )
@@ -78,7 +78,7 @@ class TestInit:
         assert hand._config.move_speed == 2.0
         assert hand._config.click_offset_range == 5
         assert hand._config.typo_probability == 0.1
-        assert hand._config.base_type_interval == 0.1
+        assert hand._config.type_interval_mu == 0.1
         assert hand._config.bezier_control_points == 2
         assert hand._config.jitter_range == 1.0
 

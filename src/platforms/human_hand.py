@@ -10,6 +10,12 @@ Step 9 升级：
 - 点击按下/抬起分离（mouse_down / mouse_up）
 - 按压时长随机化（50-150ms）
 - 点击后微小移动（±3px）
+
+Step 10 升级：
+- 键盘按键间隔正态分布（30-120ms）
+- 偶尔退格+重输（模拟打字纠错，概率 2%）
+- 中英文切换增加延迟
+- 剪贴板粘贴前等待（200-500ms）
 """
 
 from __future__ import annotations
@@ -29,15 +35,25 @@ if TYPE_CHECKING:
 class HumanHandConfig:
     """拟人手部配置。"""
 
+    # ── 鼠标相关 ──
     move_speed: float = 1.0            # 移动速度倍率
     click_offset_range: int = 3        # 点击偏移范围（像素）
-    typo_probability: float = 0.02     # 打错概率
-    base_type_interval: float = 0.05   # 基础打字间隔（秒）
     bezier_control_points: int = 3     # 贝塞尔曲线控制点数量
     jitter_range: float = 2.0          # 鼠标轨迹抖动范围（像素）
     press_duration_min: float = 0.05   # 最小按压时长（秒）
     press_duration_max: float = 0.15   # 最大按压时长（秒）
     post_click_move_range: int = 3     # 点击后微移范围（像素）
+
+    # ── 键盘相关（Step 10）──
+    typo_probability: float = 0.02     # 打错概率（2%）
+    type_interval_min: float = 0.03    # 按键间隔最小值（30ms）
+    type_interval_max: float = 0.12    # 按键间隔最大值（120ms）
+    type_interval_mu: float = 0.075    # 按键间隔正态分布均值（75ms）
+    type_interval_sigma: float = 0.02  # 按键间隔正态分布标准差（20ms）
+    lang_switch_delay_min: float = 0.15  # 中英文切换延迟最小（150ms）
+    lang_switch_delay_max: float = 0.40  # 中英文切换延迟最大（400ms）
+    paste_delay_min: float = 0.20      # 粘贴前延迟最小（200ms）
+    paste_delay_max: float = 0.50      # 粘贴前延迟最大（500ms）
 
 
 class HumanHand:
@@ -242,27 +258,46 @@ class HumanHand:
                 await asyncio.sleep(random.uniform(0.05, 0.15))
 
     # ================================================================
-    # 键盘操作
+    # 键盘操作（Step 10 升级）
     # ================================================================
 
     async def human_type(self, text: str, base_interval: float = 0.05) -> None:
-        """拟人打字 - 随机间隔 + 偶尔打错再删除。"""
-        effective_interval = base_interval or self._config.base_type_interval
+        """拟人打字 - 正态分布间隔 + 偶尔退格纠错 + 中英文切换延迟。
+
+        特征：
+        - 按键间隔：正态分布（均值 75ms，σ 20ms），裁剪到 30-120ms
+        - 打字纠错：概率 2%，输入错误字符 → 停顿 → 退格 → 重输正确字符
+        - 中英文切换：检测到语言切换时增加 150-400ms 延迟
+        - 标点/空格后额外停顿
+        """
+        prev_is_cjk: bool | None = None  # 上一个字符是否为中文（None 表示初始状态）
 
         for ch in text:
-            # 偶尔打错
+            # 检测中英文切换
+            cur_is_cjk = self._is_cjk_char(ch)
+            if prev_is_cjk is not None and cur_is_cjk != prev_is_cjk:
+                # 语言切换，增加延迟
+                switch_delay = random.uniform(
+                    self._config.lang_switch_delay_min,
+                    self._config.lang_switch_delay_max,
+                )
+                await asyncio.sleep(switch_delay)
+            prev_is_cjk = cur_is_cjk
+
+            # 偶尔打错（仅对非空白字符）
             if (
                 random.random() < self._config.typo_probability
                 and ch.strip()
             ):
                 wrong_char = random.choice(string.ascii_lowercase)
                 await self._adapter.type_text(wrong_char, interval=0)
-                await asyncio.sleep(random.uniform(0.1, 0.3))
+                await asyncio.sleep(random.uniform(0.1, 0.3))  # 意识到打错了
 
                 await self._adapter.press_key("backspace")
-                await asyncio.sleep(random.uniform(0.05, 0.15))
+                await asyncio.sleep(random.uniform(0.05, 0.15))  # 退格后停顿
 
-            interval = self._random_offset(effective_interval, ratio=0.5)
+            # 正态分布按键间隔，裁剪到 30-120ms
+            interval = self._generate_type_interval()
             await self._adapter.type_text(ch, interval=interval)
 
             if ch in self._PUNCTUATION:
@@ -270,6 +305,33 @@ class HumanHand:
 
             if ch == " ":
                 await asyncio.sleep(random.uniform(0.05, 0.2))
+
+    async def human_paste(self, text: str) -> None:
+        """拟人剪贴板粘贴 - 粘贴前等待 200-500ms。
+
+        流程：
+        1. 随机等待 200-500ms（模拟"思考"或"准备粘贴"）
+        2. 复制文本到剪贴板
+        3. 执行 Ctrl+V 粘贴
+        """
+        # 粘贴前等待
+        pre_delay = random.uniform(
+            self._config.paste_delay_min,
+            self._config.paste_delay_max,
+        )
+        await asyncio.sleep(pre_delay)
+
+        # 复制到剪贴板
+        try:
+            import pyperclip
+            pyperclip.copy(text)
+        except ImportError:
+            from src.platforms.windows import _paste_via_clipboard
+            _paste_via_clipboard(text)
+            return
+
+        # 执行粘贴
+        await self._adapter.hotkey("ctrl", "v")
 
     async def human_press_key(self, key: str) -> None:
         """拟人按键 - 按下后随机保持时间。"""
@@ -376,3 +438,31 @@ class HumanHand:
 
         points.append((end_x, end_y))
         return points
+
+    def _is_cjk_char(self, ch: str) -> bool:
+        """判断字符是否为中日韩文字。"""
+        cp = ord(ch)
+        # CJK Unified Ideographs: U+4E00–U+9FFF
+        # CJK Extension A: U+3400–U+4DBF
+        # CJK Extension B: U+20000–U+2A6DF
+        # CJK Compatibility Ideographs: U+F900–U+FAFF
+        # Full-width forms: U+FF00–U+FFEF
+        # CJK Symbols and Punctuation: U+3000–U+303F
+        # Hiragana: U+3040–U+309F, Katakana: U+30A0–U+30FF
+        return (
+            (0x4E00 <= cp <= 0x9FFF)
+            or (0x3400 <= cp <= 0x4DBF)
+            or (0x20000 <= cp <= 0x2A6DF)
+            or (0xF900 <= cp <= 0xFAFF)
+            or (0x3000 <= cp <= 0x303F)
+            or (0x3040 <= cp <= 0x309F)
+            or (0x30A0 <= cp <= 0x30FF)
+        )
+
+    def _generate_type_interval(self) -> float:
+        """生成正态分布的按键间隔，裁剪到 [min, max] 范围。
+
+        使用高斯分布（均值 75ms，σ 20ms），结果裁剪到 30-120ms。
+        """
+        raw = random.gauss(self._config.type_interval_mu, self._config.type_interval_sigma)
+        return max(self._config.type_interval_min, min(self._config.type_interval_max, raw))
