@@ -26,6 +26,8 @@ def mock_adapter():
     adapter.scroll = AsyncMock()
     adapter.drag_to = AsyncMock()
     adapter.screenshot = AsyncMock(return_value=b"")
+    adapter.mouse_down = AsyncMock()
+    adapter.mouse_up = AsyncMock()
     return adapter
 
 
@@ -160,16 +162,17 @@ class TestHumanMoveTo:
 class TestHumanClick:
     @pytest.mark.asyncio
     async def test_human_click_sequence(self, hand, mock_adapter):
-        """human_click 先移动再停顿再点击。"""
+        """human_click 先移动再停顿再 mouse_down/mouse_up。"""
         with patch("asyncio.sleep", new_callable=AsyncMock):
             await hand.human_click(100, 200)
 
         # move_to 应被调用（贝塞尔曲线路径）
         assert mock_adapter.move_to.call_count > 0
-        # click 应被调用一次
-        assert mock_adapter.click.call_count == 1
-        # click 的坐标应在 (100±3, 200±3) 范围内
-        call_args = mock_adapter.click.call_args
+        # mouse_down 和 mouse_up 应各被调用一次
+        assert mock_adapter.mouse_down.call_count == 1
+        assert mock_adapter.mouse_up.call_count == 1
+        # mouse_down 的坐标应在 (100±3, 200±3) 范围内
+        call_args = mock_adapter.mouse_down.call_args
         cx, cy = call_args[0][0], call_args[0][1]
         assert 97 <= cx <= 103
         assert 197 <= cy <= 203
@@ -182,9 +185,11 @@ class TestHumanDrag:
         with patch("asyncio.sleep", new_callable=AsyncMock):
             await hand.human_drag(10, 20, 100, 200, duration=0.1)
 
-        mock_adapter.drag_to.assert_called_once()
-        call_args = mock_adapter.drag_to.call_args
-        assert call_args[0] == (10, 20, 100, 200)
+        # human_drag 现在使用 mouse_down + 贝塞尔曲线移动 + mouse_up
+        assert mock_adapter.mouse_down.call_count == 1
+        assert mock_adapter.mouse_up.call_count == 1
+        # move_to 应被调用多次（贝塞尔曲线路径）
+        assert mock_adapter.move_to.call_count > 1
 
 
 class TestHumanScroll:

@@ -2,11 +2,20 @@
 
 在 PlatformAdapter 之上提供拟人化的鼠标/键盘操作，
 让机器操作更接近真人行为，降低被自动化检测的风险。
+
+Step 9 升级：
+- 贝塞尔曲线 + 随机控制点偏移
+- 非线性速度（缓入缓出）
+- 轨迹微抖动（±1-2px）
+- 点击按下/抬起分离（mouse_down / mouse_up）
+- 按压时长随机化（50-150ms）
+- 点击后微小移动（±3px）
 """
 
 from __future__ import annotations
 
 import asyncio
+import math
 import random
 import string
 from dataclasses import dataclass, field
@@ -26,6 +35,9 @@ class HumanHandConfig:
     base_type_interval: float = 0.05   # 基础打字间隔（秒）
     bezier_control_points: int = 3     # 贝塞尔曲线控制点数量
     jitter_range: float = 2.0          # 鼠标轨迹抖动范围（像素）
+    press_duration_min: float = 0.05   # 最小按压时长（秒）
+    press_duration_max: float = 0.15   # 最大按压时长（秒）
+    post_click_move_range: int = 3     # 点击后微移范围（像素）
 
 
 class HumanHand:
@@ -44,8 +56,13 @@ class HumanHand:
     async def human_move_to(
         self, x: int, y: int, duration: float | None = None
     ) -> None:
-        """拟人移动鼠标 - 贝塞尔曲线路径 + 随机抖动。"""
-        # 获取当前位置（如果 adapter 支持的话）
+        """拟人移动鼠标 - 贝塞尔曲线路径 + 非线性速度 + 随机抖动。
+
+        路径特征：
+        - 贝塞尔曲线：起止点 + 随机偏移的中间控制点
+        - 非线性速度：缓入缓出（启动慢 → 中间快 → 接近目标减速）
+        - 微抖动：每步加入 ±jitter_range 像素的随机偏移
+        """
         # 以 (0, 0) 作为默认起点，真实场景由上层提供
         start_x, start_y = 0, 0
         distance = self._distance(start_x, start_y, x, y)
@@ -53,7 +70,7 @@ class HumanHand:
         if duration is None:
             duration = self._calculate_move_duration(distance) / self._config.move_speed
 
-        # 生成贝塞尔曲线路径
+        # 生成贝塞尔曲线路径（含随机控制点偏移）
         control_points = self._generate_control_points(
             start_x, start_y, x, y,
             num_points=self._config.bezier_control_points,
@@ -61,12 +78,13 @@ class HumanHand:
         num_steps = max(int(duration / 0.010), 10)  # ~10ms per step
         curve = self._bezier_curve(control_points, num_steps)
 
-        # 沿曲线移动，加入抖动
+        # 沿曲线移动，加入抖动 + 非线性速度
         for i, (cx, cy) in enumerate(curve):
+            # 微抖动：±jitter_range 像素随机偏移
             jx = cx + random.uniform(-self._config.jitter_range, self._config.jitter_range)
             jy = cy + random.uniform(-self._config.jitter_range, self._config.jitter_range)
 
-            # 应用缓入缓出控制步进间隔
+            # 非线性速度：缓入缓出控制步进间隔
             t = i / max(num_steps - 1, 1)
             eased = self._ease_in_out(t)
             step_delay = duration / num_steps * (0.5 + eased)
@@ -81,20 +99,82 @@ class HumanHand:
         button: str = "left",
         clicks: int = 1,
     ) -> None:
-        """拟人点击 - 移动 + 随机停顿 + 点击。"""
+        """拟人点击 - 移动 + 随机偏移 + mouse_down/mouse_up 分离 + 按压时长 + 点击后微移。
+
+        流程：
+        1. 移动到目标附近（加入微小偏移）
+        2. 短暂停顿
+        3. mouse_down（按下）
+        4. 按压保持 50-150ms
+        5. mouse_up（抬起）
+        6. 微小移动（±post_click_move_range 像素）
+        """
         # 移动到目标附近（加入微小偏移）
         offset_x = random.randint(-self._config.click_offset_range, self._config.click_offset_range)
         offset_y = random.randint(-self._config.click_offset_range, self._config.click_offset_range)
-        await self.human_move_to(x + offset_x, y + offset_y)
+        target_x = x + offset_x
+        target_y = y + offset_y
+        await self.human_move_to(target_x, target_y)
 
         # 随机短暂停顿 50-200ms
         await asyncio.sleep(random.uniform(0.05, 0.2))
 
-        # 点击
-        await self._adapter.click(x + offset_x, y + offset_y, button=button, clicks=clicks)
+        for _ in range(clicks):
+            # 按下（mouse_down）
+            await self._mouse_down(target_x, target_y, button)
 
-        # 点击后随机停顿 30-100ms
+            # 按压保持 50-150ms（随机化）
+            press_duration = random.uniform(
+                self._config.press_duration_min,
+                self._config.press_duration_max,
+            )
+            await asyncio.sleep(press_duration)
+
+            # 抬起（mouse_up）
+            await self._mouse_up(target_x, target_y, button)
+
+            # 多次点击间隔
+            if clicks > 1:
+                await asyncio.sleep(random.uniform(0.05, 0.15))
+
+        # 点击后微小移动
+        if self._config.post_click_move_range > 0:
+            micro_x = target_x + random.randint(
+                -self._config.post_click_move_range,
+                self._config.post_click_move_range,
+            )
+            micro_y = target_y + random.randint(
+                -self._config.post_click_move_range,
+                self._config.post_click_move_range,
+            )
+            await self._adapter.move_to(micro_x, micro_y, duration=0)
+
+        # 点击后随机停顿
         await asyncio.sleep(random.uniform(0.03, 0.1))
+
+    async def _mouse_down(self, x: int, y: int, button: str = "left") -> None:
+        """鼠标按下操作。
+
+        优先使用 adapter.mouse_down，不可用时回退到 pyautogui.mouseDown。
+        """
+        if hasattr(self._adapter, "mouse_down") and callable(getattr(self._adapter, "mouse_down")):
+            await self._adapter.mouse_down(x, y, button=button)
+        else:
+            # 回退：使用 pyautogui
+            import pyautogui
+            pyautogui.mouseDown(x=x, y=y, button=button)
+
+    async def _mouse_up(self, x: int, y: int, button: str = "left") -> None:
+        """鼠标抬起操作。
+
+        优先使用 adapter.mouse_up，不可用时回退到 pyautogui.mouseUp。
+        """
+        if hasattr(self._adapter, "mouse_up") and callable(getattr(self._adapter, "mouse_up")):
+            await self._adapter.mouse_up(x, y, button=button)
+        else:
+            # 回退：使用 pyautogui
+            import pyautogui
+            pyautogui.mouseUp(x=x, y=y, button=button)
 
     async def human_double_click(self, x: int, y: int) -> None:
         """拟人双击。"""
@@ -119,17 +199,38 @@ class HumanHand:
         await self.human_move_to(start_x, start_y)
         await asyncio.sleep(random.uniform(0.05, 0.15))
 
-        # 使用 adapter 拖拽
+        # 按下
+        await self._mouse_down(start_x, start_y)
+        await asyncio.sleep(random.uniform(0.05, 0.1))
+
+        # 拟人移动到终点
         dist = self._distance(start_x, start_y, end_x, end_y)
         if duration is None:
             duration = self._calculate_move_duration(dist) / self._config.move_speed
 
-        await self._adapter.drag_to(start_x, start_y, end_x, end_y, duration=duration)
+        # 生成贝塞尔曲线拖拽路径
+        control_points = self._generate_control_points(
+            start_x, start_y, end_x, end_y,
+            num_points=self._config.bezier_control_points,
+        )
+        num_steps = max(int(duration / 0.010), 10)
+        curve = self._bezier_curve(control_points, num_steps)
+
+        for i, (cx, cy) in enumerate(curve):
+            jx = cx + random.uniform(-self._config.jitter_range, self._config.jitter_range)
+            jy = cy + random.uniform(-self._config.jitter_range, self._config.jitter_range)
+            t = i / max(num_steps - 1, 1)
+            eased = self._ease_in_out(t)
+            step_delay = duration / num_steps * (0.5 + eased)
+            await self._adapter.move_to(int(jx), int(jy), duration=0)
+            await asyncio.sleep(step_delay)
+
+        # 释放
+        await self._mouse_up(end_x, end_y)
         await asyncio.sleep(random.uniform(0.03, 0.1))
 
     async def human_scroll(self, clicks: int = 3, direction: str = "down") -> None:
         """拟人滚动 - 分段滚动，每段随机间隔。"""
-        # 将总滚动量拆分成 1~clicks 段
         segments = random.randint(1, max(clicks, 1))
         per_segment = max(clicks // segments, 1)
         remainder = clicks - per_segment * segments
@@ -154,40 +255,29 @@ class HumanHand:
                 random.random() < self._config.typo_probability
                 and ch.strip()
             ):
-                # 打一个错误的字符
                 wrong_char = random.choice(string.ascii_lowercase)
                 await self._adapter.type_text(wrong_char, interval=0)
                 await asyncio.sleep(random.uniform(0.1, 0.3))
 
-                # 删除错误字符
                 await self._adapter.press_key("backspace")
                 await asyncio.sleep(random.uniform(0.05, 0.15))
 
-            # 打正确的字符
             interval = self._random_offset(effective_interval, ratio=0.5)
             await self._adapter.type_text(ch, interval=interval)
 
-            # 标点符号后额外停顿
             if ch in self._PUNCTUATION:
                 await asyncio.sleep(random.uniform(0.1, 0.4))
 
-            # 空格后额外停顿
             if ch == " ":
                 await asyncio.sleep(random.uniform(0.05, 0.2))
 
     async def human_press_key(self, key: str) -> None:
         """拟人按键 - 按下后随机保持时间。"""
         await self._adapter.press_key(key)
-        # 模拟按键保持时间
         await asyncio.sleep(random.uniform(0.05, 0.15))
 
     async def human_hotkey(self, *keys: str) -> None:
         """拟人组合键 - 按键间有微小间隔。"""
-        # 每个键间隔 30-80ms 按下
-        # 保持 50-150ms
-        # 每个键间隔 30-80ms 释放（反序）
-        # 直接使用 adapter.hotkey，因为底层实现已处理按下/释放
-        # 在前后添加随机延迟以拟人化
         await asyncio.sleep(random.uniform(0.03, 0.08))
         await self._adapter.hotkey(*keys)
         await asyncio.sleep(random.uniform(0.05, 0.15))
@@ -215,7 +305,6 @@ class HumanHand:
 
         for step in range(num_steps):
             t = step / max(num_steps - 1, 1)
-            # de Casteljau 算法
             work = [list(p) for p in points]
             for level in range(1, n + 1):
                 for i in range(n - level + 1):
@@ -226,11 +315,11 @@ class HumanHand:
         return result
 
     def _ease_in_out(self, t: float) -> float:
-        """缓入缓出函数。
+        """缓入缓出函数（三次缓动）。
 
-        使用正弦缓动，t ∈ [0, 1] → [0, 1]。
+        t ∈ [0, 1] → [0, 1]
+        特征：启动慢 → 中间快 → 接近目标减速
         """
-        # 简单的三次缓动
         if t < 0.5:
             return 4 * t * t * t
         else:
@@ -248,14 +337,12 @@ class HumanHand:
     def _calculate_move_duration(self, distance: float) -> float:
         """根据距离计算移动时间。
 
-        - 200px 以内：约 0.3s
-        - 1000px：约 0.8s
+        - 短距离（<200px）：约 0.3s
+        - 中距离（1000px）：约 0.8s
         - 上限：2s
         """
         if distance <= 0:
             return 0.1
-        # 使用对数映射：短距离快、长距离慢但有上限
-        import math
         duration = 0.2 + 0.1 * math.log10(max(distance, 1))
         return min(max(duration, 0.15), 2.0)
 
@@ -267,7 +354,11 @@ class HumanHand:
         end_y: float,
         num_points: int = 3,
     ) -> list[tuple[float, float]]:
-        """在起止点之间生成随机贝塞尔曲线控制点。"""
+        """在起止点之间生成随机贝塞尔曲线控制点。
+
+        控制点沿起止点连线分布，但加入与距离成比例的随机偏移，
+        使曲线呈现自然的弧度，而非机械的直线运动。
+        """
         points: list[tuple[float, float]] = [(start_x, start_y)]
 
         for i in range(1, num_points + 1):
@@ -275,7 +366,7 @@ class HumanHand:
             # 线性插值基础位置
             bx = start_x + (end_x - start_x) * t
             by = start_y + (end_y - start_y) * t
-            # 加入随机偏移（偏移量与距离相关）
+            # 加入随机偏移（偏移量与距离相关，比例 0.3）
             offset_scale = self._distance(
                 int(start_x), int(start_y), int(end_x), int(end_y)
             ) * 0.3
